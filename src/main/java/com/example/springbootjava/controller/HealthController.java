@@ -13,7 +13,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/public")
+@RequestMapping("/api")
 public class HealthController {
     
     @Autowired
@@ -54,6 +54,17 @@ public class HealthController {
                 "status", "UP",
                 "service", "springboot-java",
                 "timestamp", LocalDateTime.now().toString()
+        ));
+    }
+    
+    // Simple public health check (no authentication required)
+    @GetMapping("/public/health")
+    public ResponseEntity<Map<String, String>> publicHealth() {
+        return ResponseEntity.ok(Map.of(
+                "status", "UP",
+                "service", "AI Study Platform Backend",
+                "timestamp", LocalDateTime.now().toString(),
+                "message", "Public health check successful"
         ));
     }
 }

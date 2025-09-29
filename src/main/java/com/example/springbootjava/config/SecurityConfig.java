@@ -58,15 +58,12 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .securityMatcher("/api/**")
-            .cors(cors -> cors.and()) // Enable CORS
+            .cors(cors -> cors.disable()) // Disable CORS restrictions
             .csrf(csrf -> csrf.disable())
             .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> 
-                auth.requestMatchers("/api/public/**").permitAll()
-                    .requestMatchers("/actuator/**").permitAll()
-                    .requestMatchers("/health").permitAll()
-                    .anyRequest().authenticated()
+                auth.anyRequest().permitAll() // Allow all requests for class project
             );
         
         http.authenticationProvider(authenticationProvider());
