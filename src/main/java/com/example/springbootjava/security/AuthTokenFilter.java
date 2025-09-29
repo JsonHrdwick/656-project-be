@@ -30,9 +30,11 @@ public class AuthTokenFilter extends OncePerRequestFilter {
                                   FilterChain filterChain) throws ServletException, IOException {
         try {
             String requestPath = request.getRequestURI();
+            logger.info("Processing request to path: " + requestPath);
             
             // Skip JWT processing for auth endpoints
             if (requestPath.startsWith("/api/auth/")) {
+                logger.info("Skipping JWT processing for auth endpoint: " + requestPath);
                 filterChain.doFilter(request, response);
                 return;
             }
