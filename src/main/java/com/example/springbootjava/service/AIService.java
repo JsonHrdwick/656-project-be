@@ -1,8 +1,6 @@
 package com.example.springbootjava.service;
 
-import com.example.springbootjava.entity.Document;
 import com.example.springbootjava.entity.Flashcard;
-import com.example.springbootjava.entity.Quiz;
 import com.example.springbootjava.entity.QuizQuestion;
 import org.springframework.stereotype.Service;
 
@@ -23,11 +21,13 @@ public class AIService {
     public List<String> extractKeyConcepts(String content) {
         // Simplified implementation - in production, use AI to extract concepts
         List<String> concepts = new ArrayList<>();
-        String[] words = content.split("\\s+");
+        // Limit content processing to first 1000 characters to reduce memory usage
+        String limitedContent = content.length() > 1000 ? content.substring(0, 1000) : content;
+        String[] words = limitedContent.split("\\s+");
         for (String word : words) {
             if (word.length() > 5 && word.matches("[a-zA-Z]+")) {
                 concepts.add(word);
-                if (concepts.size() >= 10) break;
+                if (concepts.size() >= 5) break; // Reduced from 10 to 5
             }
         }
         return concepts;
@@ -37,9 +37,12 @@ public class AIService {
         // Simplified implementation - in production, use AI to generate flashcards
         List<Flashcard> flashcards = new ArrayList<>();
         
+        // Limit content processing to reduce memory usage
+        String limitedContent = content.length() > 2000 ? content.substring(0, 2000) : content;
+        
         // Create sample flashcards based on content
-        String[] sentences = content.split("[.!?]+");
-        for (int i = 0; i < Math.min(3, sentences.length); i++) {
+        String[] sentences = limitedContent.split("[.!?]+");
+        for (int i = 0; i < Math.min(2, sentences.length); i++) { // Reduced from 3 to 2
             if (sentences[i].trim().length() > 10) {
                 Flashcard flashcard = new Flashcard();
                 flashcard.setQuestion("What is the main point of: " + sentences[i].trim() + "?");
@@ -57,9 +60,13 @@ public class AIService {
         // Simplified implementation - in production, use AI to generate quiz questions
         List<QuizQuestion> questions = new ArrayList<>();
         
+        // Limit content processing and number of questions to reduce memory usage
+        String limitedContent = content.length() > 2000 ? content.substring(0, 2000) : content;
+        int maxQuestions = Math.min(numberOfQuestions, 3); // Cap at 3 questions
+        
         // Create sample questions based on content
-        String[] sentences = content.split("[.!?]+");
-        for (int i = 0; i < Math.min(numberOfQuestions, sentences.length); i++) {
+        String[] sentences = limitedContent.split("[.!?]+");
+        for (int i = 0; i < Math.min(maxQuestions, sentences.length); i++) {
             if (sentences[i].trim().length() > 10) {
                 QuizQuestion question = new QuizQuestion();
                 question.setQuestionText("What is the main topic of: " + sentences[i].trim() + "?");

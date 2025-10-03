@@ -6,6 +6,7 @@ import com.example.springbootjava.repository.DocumentRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,6 +19,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 @Transactional
@@ -111,26 +113,27 @@ public class DocumentService {
         }
     }
     
-    private void processDocumentAsync(Document document) {
-        // In a real application, this would be processed asynchronously
-        // For now, we'll process it synchronously
-        try {
-            // Extract text content from file
-            String content = extractTextContent(document.getFilePath());
-            document.setContent(content);
-            
-            // Generate summary
-            String summary = aiService.generateSummary(content);
-            document.setSummary(summary);
-            
-            // Update processing status
-            document.setProcessingStatus(Document.ProcessingStatus.COMPLETED);
-            documentRepository.save(document);
-            
-        } catch (Exception e) {
-            document.setProcessingStatus(Document.ProcessingStatus.FAILED);
-            documentRepository.save(document);
-        }
+    @Async
+    public CompletableFuture<Void> processDocumentAsync(Document document) {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                // Extract text content from file
+                String content = extractTextContent(document.getFilePath());
+                document.setContent(content);
+                
+                // Generate summary
+                String summary = aiService.generateSummary(content);
+                document.setSummary(summary);
+                
+                // Update processing status
+                document.setProcessingStatus(Document.ProcessingStatus.COMPLETED);
+                documentRepository.save(document);
+                
+            } catch (Exception e) {
+                document.setProcessingStatus(Document.ProcessingStatus.FAILED);
+                documentRepository.save(document);
+            }
+        });
     }
     
     private String extractTextContent(String filePath) throws IOException {
