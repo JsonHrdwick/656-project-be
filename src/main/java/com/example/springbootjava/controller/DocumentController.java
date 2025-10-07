@@ -23,17 +23,66 @@ public class DocumentController extends BaseController {
     @Autowired
     private DocumentService documentService;
     
+    @GetMapping("/test")
+    public ResponseEntity<?> testEndpoint(Authentication authentication) {
+        try {
+            System.out.println("=== TEST ENDPOINT DEBUG ===");
+            System.out.println("Authentication: " + (authentication != null ? "Present" : "Null"));
+            
+            ResponseEntity<?> authCheck = checkAuthentication(authentication);
+            if (authCheck != null) {
+                System.out.println("Authentication check failed");
+                return authCheck;
+            }
+            
+            User user = getCurrentUser(authentication);
+            System.out.println("User: " + user.getEmail());
+            System.out.println("User ID: " + user.getId());
+            
+            return ResponseEntity.ok(Map.of(
+                "message", "Test endpoint working",
+                "user", user.getEmail(),
+                "userId", user.getId()
+            ));
+        } catch (Exception e) {
+            System.out.println("=== TEST ENDPOINT ERROR ===");
+            System.out.println("Error: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Error: " + e.getMessage());
+        }
+    }
+    
     @PostMapping("/upload")
     public ResponseEntity<?> uploadDocument(@RequestParam("file") MultipartFile file,
                                           Authentication authentication) {
-        ResponseEntity<?> authCheck = checkAuthentication(authentication);
-        if (authCheck != null) return authCheck;
-        
         try {
+            System.out.println("=== UPLOAD DEBUG START ===");
+            System.out.println("File name: " + file.getOriginalFilename());
+            System.out.println("File size: " + file.getSize());
+            System.out.println("File content type: " + file.getContentType());
+            System.out.println("Authentication: " + (authentication != null ? "Present" : "Null"));
+            
+            ResponseEntity<?> authCheck = checkAuthentication(authentication);
+            if (authCheck != null) {
+                System.out.println("Authentication check failed");
+                return authCheck;
+            }
+            
             User user = getCurrentUser(authentication);
+            System.out.println("User: " + user.getEmail());
+            
             Document document = documentService.uploadDocument(file, user);
+            System.out.println("Document created with ID: " + document.getId());
+            System.out.println("=== UPLOAD DEBUG END ===");
+            
             return ResponseEntity.ok(document);
-        } catch (IOException e) {
+        } catch (Exception e) {
+            System.out.println("=== UPLOAD ERROR ===");
+            System.out.println("Error type: " + e.getClass().getSimpleName());
+            System.out.println("Error message: " + e.getMessage());
+            e.printStackTrace();
+            System.out.println("=== UPLOAD ERROR END ===");
+            
             return ResponseEntity.badRequest()
                     .body("Error uploading file: " + e.getMessage());
         }

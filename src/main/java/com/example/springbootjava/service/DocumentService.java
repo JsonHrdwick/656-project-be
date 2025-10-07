@@ -34,22 +34,36 @@ public class DocumentService {
     private final String uploadDir = "uploads/documents";
     
     public Document uploadDocument(MultipartFile file, User user) throws IOException {
+        System.out.println("=== DOCUMENT SERVICE DEBUG START ===");
+        System.out.println("Upload directory: " + uploadDir);
+        
         // Create upload directory if it doesn't exist
         Path uploadPath = Paths.get(uploadDir);
+        System.out.println("Upload path: " + uploadPath.toAbsolutePath());
+        
         if (!Files.exists(uploadPath)) {
+            System.out.println("Creating upload directory...");
             Files.createDirectories(uploadPath);
+            System.out.println("Upload directory created");
         }
         
         // Generate unique filename
         String originalFilename = file.getOriginalFilename();
+        System.out.println("Original filename: " + originalFilename);
+        
         String fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
         String uniqueFilename = UUID.randomUUID().toString() + fileExtension;
         Path filePath = uploadPath.resolve(uniqueFilename);
+        System.out.println("Unique filename: " + uniqueFilename);
+        System.out.println("Full file path: " + filePath.toAbsolutePath());
         
         // Save file
+        System.out.println("Saving file...");
         Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+        System.out.println("File saved successfully");
         
         // Create document entity
+        System.out.println("Creating document entity...");
         Document document = new Document(
                 originalFilename,
                 getFileType(originalFilename),
@@ -58,12 +72,17 @@ public class DocumentService {
                 file.getSize(),
                 user
         );
+        System.out.println("Document entity created");
         
         // Save document
+        System.out.println("Saving document to database...");
         document = documentRepository.save(document);
+        System.out.println("Document saved with ID: " + document.getId());
         
         // Process document asynchronously
+        System.out.println("Starting async document processing...");
         processDocumentAsync(document);
+        System.out.println("=== DOCUMENT SERVICE DEBUG END ===");
         
         return document;
     }
