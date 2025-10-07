@@ -1,5 +1,6 @@
 package com.example.springbootjava.controller;
 
+import com.example.springbootjava.dto.DocumentResponseDTO;
 import com.example.springbootjava.entity.Document;
 import com.example.springbootjava.entity.User;
 import com.example.springbootjava.service.DocumentService;
@@ -75,7 +76,9 @@ public class DocumentController extends BaseController {
             System.out.println("Document created with ID: " + document.getId());
             System.out.println("=== UPLOAD DEBUG END ===");
             
-            return ResponseEntity.ok(document);
+            // Convert to DTO to avoid lazy loading issues
+            DocumentResponseDTO responseDTO = new DocumentResponseDTO(document);
+            return ResponseEntity.ok(responseDTO);
         } catch (Exception e) {
             System.out.println("=== UPLOAD ERROR ===");
             System.out.println("Error type: " + e.getClass().getSimpleName());
@@ -89,10 +92,13 @@ public class DocumentController extends BaseController {
     }
     
     @GetMapping
-    public ResponseEntity<List<Document>> getUserDocuments(Authentication authentication) {
+    public ResponseEntity<List<DocumentResponseDTO>> getUserDocuments(Authentication authentication) {
         User user = (User) authentication.getPrincipal();
         List<Document> documents = documentService.getUserDocuments(user);
-        return ResponseEntity.ok(documents);
+        List<DocumentResponseDTO> responseDTOs = documents.stream()
+                .map(DocumentResponseDTO::new)
+                .toList();
+        return ResponseEntity.ok(responseDTOs);
     }
     
     @GetMapping("/page")
@@ -104,32 +110,39 @@ public class DocumentController extends BaseController {
     }
     
     @GetMapping("/{id}")
-    public ResponseEntity<Document> getDocument(@PathVariable Long id,
+    public ResponseEntity<DocumentResponseDTO> getDocument(@PathVariable Long id,
                                               Authentication authentication) {
         User user = (User) authentication.getPrincipal();
         Optional<Document> document = documentService.getDocumentById(id);
         
         if (document.isPresent() && document.get().getUser().getId().equals(user.getId())) {
-            return ResponseEntity.ok(document.get());
+            DocumentResponseDTO responseDTO = new DocumentResponseDTO(document.get());
+            return ResponseEntity.ok(responseDTO);
         } else {
             return ResponseEntity.notFound().build();
         }
     }
     
     @GetMapping("/search")
-    public ResponseEntity<List<Document>> searchDocuments(@RequestParam String q,
+    public ResponseEntity<List<DocumentResponseDTO>> searchDocuments(@RequestParam String q,
                                                         Authentication authentication) {
         User user = (User) authentication.getPrincipal();
         List<Document> documents = documentService.searchDocuments(user, q);
-        return ResponseEntity.ok(documents);
+        List<DocumentResponseDTO> responseDTOs = documents.stream()
+                .map(DocumentResponseDTO::new)
+                .toList();
+        return ResponseEntity.ok(responseDTOs);
     }
     
     @GetMapping("/type/{fileType}")
-    public ResponseEntity<List<Document>> getDocumentsByType(@PathVariable String fileType,
+    public ResponseEntity<List<DocumentResponseDTO>> getDocumentsByType(@PathVariable String fileType,
                                                            Authentication authentication) {
         User user = (User) authentication.getPrincipal();
         List<Document> documents = documentService.getDocumentsByFileType(user, fileType);
-        return ResponseEntity.ok(documents);
+        List<DocumentResponseDTO> responseDTOs = documents.stream()
+                .map(DocumentResponseDTO::new)
+                .toList();
+        return ResponseEntity.ok(responseDTOs);
     }
     
     @GetMapping("/stats")
