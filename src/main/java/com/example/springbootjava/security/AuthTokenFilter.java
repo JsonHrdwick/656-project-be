@@ -30,11 +30,19 @@ public class AuthTokenFilter extends OncePerRequestFilter {
                                   FilterChain filterChain) throws ServletException, IOException {
         try {
             String requestPath = request.getRequestURI();
-            logger.info("Processing request to path: " + requestPath);
+            String threadName = Thread.currentThread().getName();
+            logger.info("Processing request to path: " + requestPath + " on thread: " + threadName);
             
             // Skip JWT processing for auth endpoints and health check
             if (requestPath.startsWith("/api/auth/") || requestPath.equals("/actuator/health")) {
                 logger.info("Skipping JWT processing for endpoint: " + requestPath);
+                filterChain.doFilter(request, response);
+                return;
+            }
+            
+            // Check if authentication is already set to avoid duplicate processing
+            if (SecurityContextHolder.getContext().getAuthentication() != null) {
+                logger.info("Authentication already set, skipping JWT processing for: " + requestPath);
                 filterChain.doFilter(request, response);
                 return;
             }

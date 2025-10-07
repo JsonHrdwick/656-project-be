@@ -18,7 +18,7 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/documents")
-public class DocumentController {
+public class DocumentController extends BaseController {
     
     @Autowired
     private DocumentService documentService;
@@ -26,8 +26,11 @@ public class DocumentController {
     @PostMapping("/upload")
     public ResponseEntity<?> uploadDocument(@RequestParam("file") MultipartFile file,
                                           Authentication authentication) {
+        ResponseEntity<?> authCheck = checkAuthentication(authentication);
+        if (authCheck != null) return authCheck;
+        
         try {
-            User user = (User) authentication.getPrincipal();
+            User user = getCurrentUser(authentication);
             Document document = documentService.uploadDocument(file, user);
             return ResponseEntity.ok(document);
         } catch (IOException e) {
