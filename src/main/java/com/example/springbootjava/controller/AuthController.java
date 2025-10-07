@@ -19,9 +19,12 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
         try {
+            System.out.println("Login attempt for email: " + loginRequest.getEmail());
             JwtResponse jwtResponse = authService.authenticateUser(loginRequest);
+            System.out.println("Login successful for user: " + jwtResponse.getUser().getEmail());
             return ResponseEntity.ok(jwtResponse);
         } catch (Exception e) {
+            System.out.println("Login failed: " + e.getMessage());
             return ResponseEntity.badRequest()
                     .body("Error: " + e.getMessage());
         }

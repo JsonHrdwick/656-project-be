@@ -32,16 +32,19 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             String requestPath = request.getRequestURI();
             logger.info("Processing request to path: " + requestPath);
             
-            // Skip JWT processing for auth endpoints
-            if (requestPath.startsWith("/api/auth/")) {
-                logger.info("Skipping JWT processing for auth endpoint: " + requestPath);
+            // Skip JWT processing for auth endpoints and health check
+            if (requestPath.startsWith("/api/auth/") || requestPath.equals("/actuator/health")) {
+                logger.info("Skipping JWT processing for endpoint: " + requestPath);
                 filterChain.doFilter(request, response);
                 return;
             }
             
             String jwt = parseJwt(request);
+            logger.info("JWT token found: " + (jwt != null ? "Yes" : "No"));
+            
             if (jwt != null && jwtUtils.validateToken(jwt)) {
                 String username = jwtUtils.extractUsername(jwt);
+                logger.info("Valid JWT for user: " + username);
                 
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
                 UsernamePasswordAuthenticationToken authentication = 
@@ -49,9 +52,12 @@ public class AuthTokenFilter extends OncePerRequestFilter {
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+                logger.info("Authentication set for user: " + username);
+            } else {
+                logger.warn("Invalid or missing JWT token for path: " + requestPath);
             }
         } catch (Exception e) {
-            logger.error("Cannot set user authentication: {}", e);
+            logger.error("Cannot set user authentication: {}");
         }
         
         filterChain.doFilter(request, response);

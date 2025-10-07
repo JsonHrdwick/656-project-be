@@ -57,12 +57,21 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .securityMatcher("/api/**")
-            .cors(cors -> cors.disable())
+            .securityMatcher(request -> {
+                String path = request.getRequestURI();
+                return path.startsWith("/api/") && !path.startsWith("/api/auth/");
+            })
+            .cors(cors -> cors.and())
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> 
-                auth.anyRequest().permitAll()
-            );
+                auth
+                    .requestMatchers("/api/health/**").permitAll()
+                    .anyRequest().authenticated()
+            )
+            .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authenticationProvider(authenticationProvider())
+            .addFilterBefore(authenticationJwtTokenFilter(), UsernamePasswordAuthenticationFilter.class);
         
         return http.build();
     }

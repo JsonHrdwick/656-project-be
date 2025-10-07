@@ -16,14 +16,17 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/flashcards")
-public class FlashcardController {
+public class FlashcardController extends BaseController {
     
     @Autowired
     private FlashcardService flashcardService;
     
     @GetMapping
-    public ResponseEntity<List<Flashcard>> getUserFlashcards(Authentication authentication) {
-        User user = (User) authentication.getPrincipal();
+    public ResponseEntity<?> getUserFlashcards(Authentication authentication) {
+        ResponseEntity<?> authCheck = checkAuthentication(authentication);
+        if (authCheck != null) return authCheck;
+        
+        User user = getCurrentUser(authentication);
         List<Flashcard> flashcards = flashcardService.getUserFlashcards(user);
         return ResponseEntity.ok(flashcards);
     }
@@ -31,6 +34,9 @@ public class FlashcardController {
     @GetMapping("/page")
     public ResponseEntity<Page<Flashcard>> getUserFlashcardsPage(Pageable pageable,
                                                                Authentication authentication) {
+        if (authentication == null || authentication.getPrincipal() == null) {
+            return ResponseEntity.status(401).build();
+        }
         User user = (User) authentication.getPrincipal();
         Page<Flashcard> flashcards = flashcardService.getUserFlashcards(user, pageable);
         return ResponseEntity.ok(flashcards);
