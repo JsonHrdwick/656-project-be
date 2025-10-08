@@ -32,7 +32,7 @@ public class WebConfig implements WebMvcConfigurer {
         boolean allowCredentials = environment.getProperty("cors.allow-credentials", Boolean.class, true);
         
         registry.addMapping("/**")
-                .allowedOrigins(origins)
+                .allowedOriginPatterns(origins)
                 .allowedMethods(methods)
                 .allowedHeaders(headers)
                 .allowCredentials(allowCredentials);

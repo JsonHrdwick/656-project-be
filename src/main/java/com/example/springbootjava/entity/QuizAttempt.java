@@ -18,14 +18,14 @@ public class QuizAttempt {
     @Column(name = "score")
     private Double score;
     
-    @Column(name = "total_questions")
-    private Integer totalQuestions;
+    @Column(name = "max_score")
+    private Double maxScore;
     
-    @Column(name = "correct_answers")
-    private Integer correctAnswers;
+    @Column(name = "time_spent_minutes")
+    private Integer timeSpentMinutes;
     
-    @Column(name = "time_taken_seconds")
-    private Integer timeTakenSeconds;
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
     
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
@@ -41,21 +41,27 @@ public class QuizAttempt {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
     
-    @OneToMany(mappedBy = "quizAttempt", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "attempt", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Set<QuizAttemptAnswer> attemptAnswers;
     
     public QuizAttempt() {
         this.createdAt = LocalDateTime.now();
     }
     
-    public QuizAttempt(Double score, Integer totalQuestions, Integer correctAnswers, Quiz quiz, User user) {
+    public QuizAttempt(Double score, Double maxScore, Integer timeSpentMinutes, Quiz quiz, User user) {
         this();
         this.score = score;
-        this.totalQuestions = totalQuestions;
-        this.correctAnswers = correctAnswers;
+        this.maxScore = maxScore;
+        this.timeSpentMinutes = timeSpentMinutes;
         this.quiz = quiz;
         this.user = user;
         this.completedAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+    
+    @PreUpdate
+    public void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
     }
     
     // Getters and Setters
@@ -75,28 +81,28 @@ public class QuizAttempt {
         this.score = score;
     }
     
-    public Integer getTotalQuestions() {
-        return totalQuestions;
+    public Double getMaxScore() {
+        return maxScore;
     }
     
-    public void setTotalQuestions(Integer totalQuestions) {
-        this.totalQuestions = totalQuestions;
+    public void setMaxScore(Double maxScore) {
+        this.maxScore = maxScore;
     }
     
-    public Integer getCorrectAnswers() {
-        return correctAnswers;
+    public Integer getTimeSpentMinutes() {
+        return timeSpentMinutes;
     }
     
-    public void setCorrectAnswers(Integer correctAnswers) {
-        this.correctAnswers = correctAnswers;
+    public void setTimeSpentMinutes(Integer timeSpentMinutes) {
+        this.timeSpentMinutes = timeSpentMinutes;
     }
     
-    public Integer getTimeTakenSeconds() {
-        return timeTakenSeconds;
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
     }
     
-    public void setTimeTakenSeconds(Integer timeTakenSeconds) {
-        this.timeTakenSeconds = timeTakenSeconds;
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
     
     public LocalDateTime getCompletedAt() {

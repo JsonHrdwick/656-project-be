@@ -20,16 +20,20 @@ public class QuizQuestion {
     @Column(name = "question_text", columnDefinition = "TEXT")
     private String questionText;
     
-    @NotBlank
-    @Column(name = "correct_answer", columnDefinition = "TEXT")
-    private String correctAnswer;
-    
-    @Column(name = "explanation", columnDefinition = "TEXT")
-    private String explanation;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "question_type")
+    private QuestionType questionType = QuestionType.MULTIPLE_CHOICE;
     
     @Positive
     @Column(name = "points")
     private Integer points = 1;
+    
+    @Column(name = "order_index")
+    private Integer order = 0;
+    
+    public enum QuestionType {
+        MULTIPLE_CHOICE, TRUE_FALSE, SHORT_ANSWER, ESSAY
+    }
     
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -49,10 +53,10 @@ public class QuizQuestion {
         this.updatedAt = LocalDateTime.now();
     }
     
-    public QuizQuestion(String questionText, String correctAnswer, Quiz quiz) {
+    public QuizQuestion(String questionText, QuestionType questionType, Quiz quiz) {
         this();
         this.questionText = questionText;
-        this.correctAnswer = correctAnswer;
+        this.questionType = questionType;
         this.quiz = quiz;
     }
     
@@ -78,20 +82,20 @@ public class QuizQuestion {
         this.questionText = questionText;
     }
     
-    public String getCorrectAnswer() {
-        return correctAnswer;
+    public QuestionType getQuestionType() {
+        return questionType;
     }
     
-    public void setCorrectAnswer(String correctAnswer) {
-        this.correctAnswer = correctAnswer;
+    public void setQuestionType(QuestionType questionType) {
+        this.questionType = questionType;
     }
     
-    public String getExplanation() {
-        return explanation;
+    public Integer getOrder() {
+        return order;
     }
     
-    public void setExplanation(String explanation) {
-        this.explanation = explanation;
+    public void setOrder(Integer order) {
+        this.order = order;
     }
     
     public Integer getPoints() {

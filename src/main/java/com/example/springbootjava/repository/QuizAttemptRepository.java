@@ -4,6 +4,7 @@ import com.example.springbootjava.entity.QuizAttempt;
 import com.example.springbootjava.entity.Quiz;
 import com.example.springbootjava.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -35,4 +36,12 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
     
     @Query("SELECT COUNT(qa) FROM QuizAttempt qa WHERE qa.quiz = :quiz")
     long countByQuiz(@Param("quiz") Quiz quiz);
+    
+    // Backup-related methods
+    @Query("SELECT qa FROM QuizAttempt qa WHERE qa.user.id = :userId")
+    List<QuizAttempt> findByUserId(@Param("userId") Long userId);
+    
+    @Modifying
+    @Query("DELETE FROM QuizAttempt qa WHERE qa.user.id = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
 }

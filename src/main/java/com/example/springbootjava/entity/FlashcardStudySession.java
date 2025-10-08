@@ -13,33 +13,37 @@ public class FlashcardStudySession {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
-    @NotNull
-    @Column(name = "is_correct")
-    private Boolean isCorrect;
+    @Column(name = "score")
+    private Double score;
     
-    @Column(name = "response_time_seconds")
-    private Integer responseTimeSeconds;
+    @Column(name = "time_spent_seconds")
+    private Integer timeSpentSeconds;
     
-    @Column(name = "studied_at")
-    private LocalDateTime studiedAt;
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+    
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "flashcard_id", nullable = false)
     private Flashcard flashcard;
     
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
-    
     public FlashcardStudySession() {
-        this.studiedAt = LocalDateTime.now();
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
     
-    public FlashcardStudySession(Boolean isCorrect, Flashcard flashcard, User user) {
+    public FlashcardStudySession(Double score, Integer timeSpentSeconds, Flashcard flashcard) {
         this();
-        this.isCorrect = isCorrect;
+        this.score = score;
+        this.timeSpentSeconds = timeSpentSeconds;
         this.flashcard = flashcard;
-        this.user = user;
+    }
+    
+    @PreUpdate
+    public void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
     }
     
     // Getters and Setters
@@ -51,28 +55,36 @@ public class FlashcardStudySession {
         this.id = id;
     }
     
-    public Boolean getIsCorrect() {
-        return isCorrect;
+    public Double getScore() {
+        return score;
     }
     
-    public void setIsCorrect(Boolean isCorrect) {
-        this.isCorrect = isCorrect;
+    public void setScore(Double score) {
+        this.score = score;
     }
     
-    public Integer getResponseTimeSeconds() {
-        return responseTimeSeconds;
+    public Integer getTimeSpentSeconds() {
+        return timeSpentSeconds;
     }
     
-    public void setResponseTimeSeconds(Integer responseTimeSeconds) {
-        this.responseTimeSeconds = responseTimeSeconds;
+    public void setTimeSpentSeconds(Integer timeSpentSeconds) {
+        this.timeSpentSeconds = timeSpentSeconds;
     }
     
-    public LocalDateTime getStudiedAt() {
-        return studiedAt;
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
     }
     
-    public void setStudiedAt(LocalDateTime studiedAt) {
-        this.studiedAt = studiedAt;
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+    
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+    
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
     
     public Flashcard getFlashcard() {
@@ -81,13 +93,5 @@ public class FlashcardStudySession {
     
     public void setFlashcard(Flashcard flashcard) {
         this.flashcard = flashcard;
-    }
-    
-    public User getUser() {
-        return user;
-    }
-    
-    public void setUser(User user) {
-        this.user = user;
     }
 }

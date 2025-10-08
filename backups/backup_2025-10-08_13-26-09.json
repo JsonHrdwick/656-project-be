@@ -1,0 +1,23 @@
+{
+  "backupTimestamp" : "2025-10-08T13:26:09.4392265",
+  "version" : "1.0",
+  "users" : [ {
+    "firstName" : "Jason",
+    "lastName" : "Hardwick",
+    "createdAt" : "2025-10-08T13:22:36.088609",
+    "password" : "$2a$10$F67BnuUBovGI2/NHFKKRSuggKA3u9Qz83riJt7gASMtfbhT1Z2cpy",
+    "role" : "ADMIN",
+    "id" : 1,
+    "email" : "jasonhardwick96@gmail.com",
+    "enabled" : true,
+    "updatedAt" : "2025-10-08T13:22:36.088609"
+  } ],
+  "documents" : [ ],
+  "flashcards" : [ ],
+  "quizzes" : [ ],
+  "quizQuestions" : [ ],
+  "quizAnswers" : [ ],
+  "quizAttempts" : [ ],
+  "quizAttemptAnswers" : [ ],
+  "flashcardStudySessions" : [ ]
+}

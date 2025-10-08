@@ -22,6 +22,9 @@ public class QuizAnswer {
     @Column(name = "is_correct")
     private Boolean isCorrect;
     
+    @Column(name = "order_index")
+    private Integer order = 0;
+    
     @Column(name = "created_at")
     private LocalDateTime createdAt;
     
@@ -37,10 +40,11 @@ public class QuizAnswer {
         this.updatedAt = LocalDateTime.now();
     }
     
-    public QuizAnswer(String answerText, Boolean isCorrect, QuizQuestion question) {
+    public QuizAnswer(String answerText, Boolean isCorrect, Integer order, QuizQuestion question) {
         this();
         this.answerText = answerText;
         this.isCorrect = isCorrect;
+        this.order = order;
         this.question = question;
     }
     
@@ -72,6 +76,14 @@ public class QuizAnswer {
     
     public void setIsCorrect(Boolean isCorrect) {
         this.isCorrect = isCorrect;
+    }
+    
+    public Integer getOrder() {
+        return order;
+    }
+    
+    public void setOrder(Integer order) {
+        this.order = order;
     }
     
     public LocalDateTime getCreatedAt() {

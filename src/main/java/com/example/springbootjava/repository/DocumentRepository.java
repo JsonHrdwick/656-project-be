@@ -5,6 +5,7 @@ import com.example.springbootjava.entity.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -36,4 +37,12 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     
     @Query("SELECT d FROM Document d WHERE d.processingStatus = :status ORDER BY d.createdAt ASC")
     List<Document> findByProcessingStatusOrderByCreatedAt(@Param("status") Document.ProcessingStatus status);
+    
+    // Backup-related methods
+    @Query("SELECT d FROM Document d WHERE d.user.id = :userId")
+    List<Document> findByUserId(@Param("userId") Long userId);
+    
+    @Modifying
+    @Query("DELETE FROM Document d WHERE d.user.id = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
 }

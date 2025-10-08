@@ -13,37 +13,44 @@ public class QuizAttemptAnswer {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
-    @Column(name = "selected_answer", columnDefinition = "TEXT")
-    private String selectedAnswer;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "selected_answer_id")
+    private QuizAnswer selectedAnswer;
     
     @NotNull
     @Column(name = "is_correct")
     private Boolean isCorrect;
     
-    @Column(name = "time_taken_seconds")
-    private Integer timeTakenSeconds;
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
     
-    @Column(name = "answered_at")
-    private LocalDateTime answeredAt;
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
     
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "quiz_attempt_id", nullable = false)
-    private QuizAttempt quizAttempt;
+    @JoinColumn(name = "attempt_id", nullable = false)
+    private QuizAttempt attempt;
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "question_id", nullable = false)
     private QuizQuestion question;
     
     public QuizAttemptAnswer() {
-        this.answeredAt = LocalDateTime.now();
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
     
-    public QuizAttemptAnswer(String selectedAnswer, Boolean isCorrect, QuizAttempt quizAttempt, QuizQuestion question) {
+    public QuizAttemptAnswer(QuizAnswer selectedAnswer, Boolean isCorrect, QuizAttempt attempt, QuizQuestion question) {
         this();
         this.selectedAnswer = selectedAnswer;
         this.isCorrect = isCorrect;
-        this.quizAttempt = quizAttempt;
+        this.attempt = attempt;
         this.question = question;
+    }
+    
+    @PreUpdate
+    public void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
     }
     
     // Getters and Setters
@@ -55,11 +62,11 @@ public class QuizAttemptAnswer {
         this.id = id;
     }
     
-    public String getSelectedAnswer() {
+    public QuizAnswer getSelectedAnswer() {
         return selectedAnswer;
     }
     
-    public void setSelectedAnswer(String selectedAnswer) {
+    public void setSelectedAnswer(QuizAnswer selectedAnswer) {
         this.selectedAnswer = selectedAnswer;
     }
     
@@ -71,28 +78,28 @@ public class QuizAttemptAnswer {
         this.isCorrect = isCorrect;
     }
     
-    public Integer getTimeTakenSeconds() {
-        return timeTakenSeconds;
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
     }
     
-    public void setTimeTakenSeconds(Integer timeTakenSeconds) {
-        this.timeTakenSeconds = timeTakenSeconds;
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
     
-    public LocalDateTime getAnsweredAt() {
-        return answeredAt;
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
     }
     
-    public void setAnsweredAt(LocalDateTime answeredAt) {
-        this.answeredAt = answeredAt;
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
     
-    public QuizAttempt getQuizAttempt() {
-        return quizAttempt;
+    public QuizAttempt getAttempt() {
+        return attempt;
     }
     
-    public void setQuizAttempt(QuizAttempt quizAttempt) {
-        this.quizAttempt = quizAttempt;
+    public void setAttempt(QuizAttempt attempt) {
+        this.attempt = attempt;
     }
     
     public QuizQuestion getQuestion() {

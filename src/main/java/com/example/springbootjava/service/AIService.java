@@ -224,9 +224,9 @@ public class AIService {
                                        "C) " + parts[3].trim() + "\n" +
                                        "D) " + parts[4].trim();
                         question.setQuestionText(question.getQuestionText() + "\n\n" + options);
-                        
-                        question.setCorrectAnswer(parts[5].trim());
-                        question.setExplanation(parts[6].trim());
+                        // Align with updated QuizQuestion model (answers stored in QuizAnswer)
+                        question.setQuestionType(QuizQuestion.QuestionType.MULTIPLE_CHOICE);
+                        question.setPoints(1);
                         questions.add(question);
                     }
                 }
@@ -244,8 +244,8 @@ public class AIService {
                 if (sentences[i].trim().length() > 10) {
                     QuizQuestion question = new QuizQuestion();
                     question.setQuestionText("What is the main topic of: " + sentences[i].trim() + "?");
-                    question.setCorrectAnswer("Sample correct answer");
-                    question.setExplanation("This is a sample explanation. In production, AI would generate proper content.");
+                    question.setQuestionType(QuizQuestion.QuestionType.MULTIPLE_CHOICE);
+                    question.setPoints(1);
                     questions.add(question);
                 }
             }

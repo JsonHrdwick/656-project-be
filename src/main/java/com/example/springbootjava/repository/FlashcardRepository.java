@@ -5,6 +5,7 @@ import com.example.springbootjava.entity.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -35,4 +36,12 @@ public interface FlashcardRepository extends JpaRepository<Flashcard, Long> {
     
     @Query("SELECT f FROM Flashcard f WHERE f.user = :user ORDER BY RANDOM() LIMIT :limit")
     List<Flashcard> findRandomByUser(@Param("user") User user, @Param("limit") int limit);
+    
+    // Backup-related methods
+    @Query("SELECT f FROM Flashcard f WHERE f.user.id = :userId")
+    List<Flashcard> findByUserId(@Param("userId") Long userId);
+    
+    @Modifying
+    @Query("DELETE FROM Flashcard f WHERE f.user.id = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
 }

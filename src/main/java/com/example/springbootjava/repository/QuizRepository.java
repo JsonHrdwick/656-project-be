@@ -5,6 +5,7 @@ import com.example.springbootjava.entity.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -35,4 +36,12 @@ public interface QuizRepository extends JpaRepository<Quiz, Long> {
     
     @Query("SELECT q FROM Quiz q WHERE q.isPublished = true ORDER BY q.createdAt DESC")
     List<Quiz> findAllPublished();
+    
+    // Backup-related methods
+    @Query("SELECT q FROM Quiz q WHERE q.user.id = :userId")
+    List<Quiz> findByUserId(@Param("userId") Long userId);
+    
+    @Modifying
+    @Query("DELETE FROM Quiz q WHERE q.user.id = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
 }
