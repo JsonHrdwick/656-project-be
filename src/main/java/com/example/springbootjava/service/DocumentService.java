@@ -13,9 +13,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 @Service
@@ -28,11 +29,20 @@ public class DocumentService {
     @Autowired
     private AIService aiService;
     
-    @Value("${document.processing.simulate:true}")
+    @Autowired
+    private LocalFileStorageService fileStorageService;
+    
+    @Autowired
+    private DocumentContentExtractor contentExtractor;
+    
+    @Value("${document.processing.simulate:false}")
     private boolean simulateProcessing;
     
+    @Value("${document.storage.local.enabled:true}")
+    private boolean localStorageEnabled;
+    
     public Document uploadDocument(MultipartFile file, User user) throws IOException {
-        System.out.println("=== DOCUMENT UPLOAD SIMULATION (POC MODE) ===");
+        System.out.println("=== DOCUMENT UPLOAD START ===");
         
         // Get file details
         String originalFilename = file.getOriginalFilename();
@@ -43,9 +53,17 @@ public class DocumentService {
         System.out.println("Content type: " + contentType);
         System.out.println("File size: " + fileSize + " bytes");
         
-        // Simulate file storage (just generate a mock file path)
-        String simulatedFilePath = "simulated/" + UUID.randomUUID().toString() + "_" + originalFilename;
-        System.out.println("Simulated file path: " + simulatedFilePath);
+        // Store file locally
+        System.out.println("Storing file locally...");
+        String storedFilePath;
+        if (localStorageEnabled) {
+            storedFilePath = fileStorageService.storeFile(file, user.getId());
+            System.out.println("File stored at: " + storedFilePath);
+        } else {
+            // Fallback for when local storage is disabled
+            storedFilePath = "mock://" + originalFilename;
+            System.out.println("Local storage disabled, using mock path: " + storedFilePath);
+        }
         
         // Create document entity
         System.out.println("Creating document entity...");
@@ -53,7 +71,7 @@ public class DocumentService {
                 originalFilename,
                 getFileType(originalFilename),
                 originalFilename,
-                simulatedFilePath, // Store simulated file path
+                storedFilePath, // Store actual file path
                 fileSize,
                 user
         );
@@ -64,10 +82,10 @@ public class DocumentService {
         document = documentRepository.save(document);
         System.out.println("Document saved with ID: " + document.getId());
         
-        // Process document asynchronously (simulated)
-        System.out.println("Starting simulated document processing...");
+        // Process document asynchronously
+        System.out.println("Starting document processing...");
         processDocumentAsync(document);
-        System.out.println("=== DOCUMENT UPLOAD SIMULATION COMPLETE ===");
+        System.out.println("=== DOCUMENT UPLOAD COMPLETE ===");
         
         return document;
     }
@@ -105,8 +123,21 @@ public class DocumentService {
         if (documentOpt.isPresent()) {
             Document document = documentOpt.get();
             if (document.getUser().getId().equals(user.getId())) {
-                // In POC mode, we just delete from database (no actual file storage)
-                System.out.println("Deleting document from database (POC mode - no file cleanup needed)");
+                // Delete file from storage if local storage is enabled
+                if (localStorageEnabled && document.getFilePath() != null && !document.getFilePath().startsWith("mock://")) {
+                    System.out.println("Deleting file from storage: " + document.getFilePath());
+                    boolean fileDeleted = fileStorageService.deleteFile(document.getFilePath());
+                    if (fileDeleted) {
+                        System.out.println("File deleted successfully");
+                    } else {
+                        System.out.println("Warning: File deletion failed, but continuing with database cleanup");
+                    }
+                } else {
+                    System.out.println("Skipping file deletion (local storage disabled or mock file)");
+                }
+                
+                // Delete from database
+                System.out.println("Deleting document from database");
                 documentRepository.delete(document);
             }
         }
@@ -120,15 +151,34 @@ public class DocumentService {
                 System.out.println("Processing document ID: " + document.getId());
                 System.out.println("Document title: " + document.getTitle());
                 
-                // Simulate content extraction (generate sample content based on file type)
-                System.out.println("Simulating content extraction...");
-                String simulatedContent = generateSimulatedContent(document.getFileType(), document.getTitle());
-                document.setContent(simulatedContent);
-                System.out.println("Simulated content generated, length: " + simulatedContent.length());
+                // Extract content from file
+                System.out.println("Extracting content from file...");
+                String content;
+                if (simulateProcessing) {
+                    // Simulate content extraction (generate sample content based on file type)
+                    System.out.println("Simulating content extraction...");
+                    content = generateSimulatedContent(document.getFileType(), document.getTitle());
+                } else if (localStorageEnabled && document.getFilePath() != null && !document.getFilePath().startsWith("mock://")) {
+                    // Extract real content from stored file
+                    System.out.println("Extracting real content from file: " + document.getFilePath());
+                    try {
+                        content = contentExtractor.extractContent(document.getFilePath());
+                    } catch (IOException e) {
+                        System.out.println("Error extracting content, falling back to simulation: " + e.getMessage());
+                        content = generateSimulatedContent(document.getFileType(), document.getTitle());
+                    }
+                } else {
+                    // Fallback to simulation
+                    System.out.println("Using simulated content (local storage disabled or mock file)");
+                    content = generateSimulatedContent(document.getFileType(), document.getTitle());
+                }
+                
+                document.setContent(content);
+                System.out.println("Content extracted, length: " + content.length());
                 
                 // Generate AI summary
                 System.out.println("Generating AI summary...");
-                String summary = aiService.generateSummary(simulatedContent);
+                String summary = aiService.generateSummary(content);
                 document.setSummary(summary);
                 System.out.println("AI summary generated: " + summary);
                 

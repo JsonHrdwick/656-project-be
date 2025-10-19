@@ -4,9 +4,15 @@ import com.example.springbootjava.dto.DocumentResponseDTO;
 import com.example.springbootjava.entity.Document;
 import com.example.springbootjava.entity.User;
 import com.example.springbootjava.service.DocumentService;
+import com.example.springbootjava.service.LocalFileStorageService;
+import com.example.springbootjava.service.FileCleanupService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +29,12 @@ public class DocumentController extends BaseController {
     
     @Autowired
     private DocumentService documentService;
+    
+    @Autowired
+    private LocalFileStorageService fileStorageService;
+    
+    @Autowired
+    private FileCleanupService fileCleanupService;
     
     @GetMapping("/test")
     public ResponseEntity<?> testEndpoint(Authentication authentication) {
@@ -164,5 +176,121 @@ public class DocumentController extends BaseController {
         User user = (User) authentication.getPrincipal();
         documentService.deleteDocument(id, user);
         return ResponseEntity.ok().build();
+    }
+    
+    @GetMapping("/{id}/download")
+    public ResponseEntity<Resource> downloadDocument(@PathVariable Long id,
+                                                   Authentication authentication) {
+        try {
+            User user = (User) authentication.getPrincipal();
+            Optional<Document> documentOpt = documentService.getDocumentById(id);
+            
+            if (documentOpt.isEmpty() || !documentOpt.get().getUser().getId().equals(user.getId())) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            Document document = documentOpt.get();
+            String filePath = document.getFilePath();
+            
+            // Check if file exists and is not a mock file
+            if (filePath == null || filePath.startsWith("mock://") || !fileStorageService.fileExists(filePath)) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            // Retrieve file content
+            byte[] fileContent = fileStorageService.retrieveFile(filePath);
+            String contentType = fileStorageService.getContentType(filePath);
+            
+            // Create resource
+            ByteArrayResource resource = new ByteArrayResource(fileContent);
+            
+            // Set headers
+            HttpHeaders headers = new HttpHeaders();
+            headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + document.getTitle() + "\"");
+            headers.add(HttpHeaders.CONTENT_TYPE, contentType);
+            headers.add(HttpHeaders.CONTENT_LENGTH, String.valueOf(fileContent.length));
+            
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(resource);
+                    
+        } catch (IOException e) {
+            System.err.println("Error downloading file: " + e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    @GetMapping("/{id}/view")
+    public ResponseEntity<Resource> viewDocument(@PathVariable Long id,
+                                               Authentication authentication) {
+        try {
+            User user = (User) authentication.getPrincipal();
+            Optional<Document> documentOpt = documentService.getDocumentById(id);
+            
+            if (documentOpt.isEmpty() || !documentOpt.get().getUser().getId().equals(user.getId())) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            Document document = documentOpt.get();
+            String filePath = document.getFilePath();
+            
+            // Check if file exists and is not a mock file
+            if (filePath == null || filePath.startsWith("mock://") || !fileStorageService.fileExists(filePath)) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            // Retrieve file content
+            byte[] fileContent = fileStorageService.retrieveFile(filePath);
+            String contentType = fileStorageService.getContentType(filePath);
+            
+            // Create resource
+            ByteArrayResource resource = new ByteArrayResource(fileContent);
+            
+            // Set headers for inline viewing
+            HttpHeaders headers = new HttpHeaders();
+            headers.add(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + document.getTitle() + "\"");
+            headers.add(HttpHeaders.CONTENT_TYPE, contentType);
+            headers.add(HttpHeaders.CONTENT_LENGTH, String.valueOf(fileContent.length));
+            
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(resource);
+                    
+        } catch (IOException e) {
+            System.err.println("Error viewing file: " + e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    @GetMapping("/storage/stats")
+    public ResponseEntity<Map<String, Object>> getStorageStats(Authentication authentication) {
+        try {
+            User user = (User) authentication.getPrincipal();
+            
+            // Get document stats
+            long totalDocuments = documentService.getDocumentCount(user);
+            long processedDocuments = documentService.getProcessedDocumentCount(user);
+            
+            // Get file storage stats
+            FileCleanupService.StorageStats storageStats = fileCleanupService.getStorageStats();
+            
+            return ResponseEntity.ok(Map.of(
+                "documents", Map.of(
+                    "total", totalDocuments,
+                    "processed", processedDocuments,
+                    "pending", totalDocuments - processedDocuments
+                ),
+                "storage", Map.of(
+                    "fileCount", storageStats.getFileCount(),
+                    "directoryCount", storageStats.getDirectoryCount(),
+                    "totalSizeBytes", storageStats.getTotalSizeBytes(),
+                    "formattedSize", storageStats.getFormattedSize()
+                )
+            ));
+            
+        } catch (Exception e) {
+            System.err.println("Error getting storage stats: " + e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
     }
 }
