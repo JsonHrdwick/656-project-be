@@ -55,10 +55,26 @@ public class DocumentService {
         
         // Store file locally
         System.out.println("Storing file locally...");
+        System.out.println("Local storage enabled: " + localStorageEnabled);
         String storedFilePath;
         if (localStorageEnabled) {
-            storedFilePath = fileStorageService.storeFile(file, user.getId());
-            System.out.println("File stored at: " + storedFilePath);
+            try {
+                storedFilePath = fileStorageService.storeFile(file, user.getId());
+                System.out.println("File stored successfully at: " + storedFilePath);
+                
+                // Verify file was actually stored
+                if (fileStorageService.fileExists(storedFilePath)) {
+                    System.out.println("File verification: File exists in storage");
+                } else {
+                    System.out.println("File verification: File NOT found in storage!");
+                }
+            } catch (Exception e) {
+                System.err.println("Error storing file: " + e.getMessage());
+                e.printStackTrace();
+                // Fallback to mock path if storage fails
+                storedFilePath = "mock://" + originalFilename;
+                System.out.println("Falling back to mock path: " + storedFilePath);
+            }
         } else {
             // Fallback for when local storage is disabled
             storedFilePath = "mock://" + originalFilename;
@@ -147,38 +163,50 @@ public class DocumentService {
     public CompletableFuture<Void> processDocumentAsync(Document document) {
         return CompletableFuture.runAsync(() -> {
             try {
-                System.out.println("=== SIMULATED DOCUMENT PROCESSING START ===");
+                System.out.println("=== DOCUMENT PROCESSING START ===");
                 System.out.println("Processing document ID: " + document.getId());
                 System.out.println("Document title: " + document.getTitle());
+                System.out.println("Simulation mode: " + simulateProcessing);
+                System.out.println("Local storage enabled: " + localStorageEnabled);
+                System.out.println("File path: " + document.getFilePath());
                 
-                // Extract content from file
-                System.out.println("Extracting content from file...");
-                String content;
+                // Extract content from file ONLY for AI processing (not for storage)
+                System.out.println("Extracting content from file for AI processing...");
+                System.out.println("DEBUG: simulateProcessing = " + simulateProcessing);
+                System.out.println("DEBUG: localStorageEnabled = " + localStorageEnabled);
+                System.out.println("DEBUG: document.getFilePath() = " + document.getFilePath());
+                System.out.println("DEBUG: filePath starts with mock = " + (document.getFilePath() != null && document.getFilePath().startsWith("mock://")));
+                
+                String contentForAI;
                 if (simulateProcessing) {
                     // Simulate content extraction (generate sample content based on file type)
-                    System.out.println("Simulating content extraction...");
-                    content = generateSimulatedContent(document.getFileType(), document.getTitle());
+                    System.out.println("SIMULATION MODE: Generating simulated content for AI");
+                    contentForAI = generateSimulatedContent(document.getFileType(), document.getTitle());
                 } else if (localStorageEnabled && document.getFilePath() != null && !document.getFilePath().startsWith("mock://")) {
-                    // Extract real content from stored file
-                    System.out.println("Extracting real content from file: " + document.getFilePath());
+                    // Extract real content from stored file for AI processing
+                    System.out.println("REAL PROCESSING MODE: Extracting real content from file: " + document.getFilePath());
                     try {
-                        content = contentExtractor.extractContent(document.getFilePath());
+                        contentForAI = contentExtractor.extractContent(document.getFilePath());
+                        System.out.println("Real content extracted successfully for AI, length: " + contentForAI.length());
                     } catch (IOException e) {
-                        System.out.println("Error extracting content, falling back to simulation: " + e.getMessage());
-                        content = generateSimulatedContent(document.getFileType(), document.getTitle());
+                        System.out.println("ERROR: Error extracting content, falling back to simulation: " + e.getMessage());
+                        e.printStackTrace();
+                        contentForAI = generateSimulatedContent(document.getFileType(), document.getTitle());
                     }
                 } else {
                     // Fallback to simulation
-                    System.out.println("Using simulated content (local storage disabled or mock file)");
-                    content = generateSimulatedContent(document.getFileType(), document.getTitle());
+                    System.out.println("FALLBACK MODE: Using simulated content (local storage disabled or mock file)");
+                    System.out.println("FALLBACK REASON: localStorageEnabled=" + localStorageEnabled + ", filePath=" + document.getFilePath());
+                    contentForAI = generateSimulatedContent(document.getFileType(), document.getTitle());
                 }
                 
-                document.setContent(content);
-                System.out.println("Content extracted, length: " + content.length());
+                // DO NOT store extracted content in database - we'll serve the actual file
+                System.out.println("Content extracted for AI processing, length: " + contentForAI.length());
+                System.out.println("Note: Not storing extracted content in database - will serve actual file instead");
                 
-                // Generate AI summary
+                // Generate AI summary using extracted content
                 System.out.println("Generating AI summary...");
-                String summary = aiService.generateSummary(content);
+                String summary = aiService.generateSummary(contentForAI);
                 document.setSummary(summary);
                 System.out.println("AI summary generated: " + summary);
                 
@@ -187,7 +215,7 @@ public class DocumentService {
                 document.setProcessingStatus(Document.ProcessingStatus.COMPLETED);
                 documentRepository.save(document);
                 System.out.println("Document processing completed successfully");
-                System.out.println("=== SIMULATED DOCUMENT PROCESSING END ===");
+                System.out.println("=== DOCUMENT PROCESSING END ===");
                 
             } catch (Exception e) {
                 System.out.println("=== DOCUMENT PROCESSING ERROR ===");

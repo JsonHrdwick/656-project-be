@@ -1,5 +1,9 @@
 package com.example.springbootjava.service;
 
+import org.apache.tika.Tika;
+import org.apache.tika.exception.TikaException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -10,27 +14,70 @@ import java.nio.file.Paths;
 @Service
 public class DocumentContentExtractor {
     
+    private final Tika tika = new Tika();
+    
+    @Value("${document.storage.local.base-path:./uploads}")
+    private String basePath;
+    
+    @Autowired
+    private LocalFileStorageService fileStorageService;
+    
     public String extractContent(String filePath) throws IOException {
-        // For now, we'll implement basic text file extraction
-        // In a production environment, you would use libraries like Apache Tika
-        // to extract content from PDF, DOCX, PPTX, etc.
+        System.out.println("=== CONTENT EXTRACTION START ===");
+        System.out.println("Extracting content from filePath: " + filePath);
+        System.out.println("Base path: " + basePath);
         
-        Path path = Paths.get(filePath);
-        String extension = getFileExtension(filePath);
-        
-        switch (extension.toLowerCase()) {
-            case "txt":
-                return extractTextContent(path);
-            case "pdf":
-            case "doc":
-            case "docx":
-            case "ppt":
-            case "pptx":
-                // For now, return a placeholder for binary files
-                // In production, use Apache Tika or similar
-                return generatePlaceholderContent(extension, path.getFileName().toString());
-            default:
-                return generatePlaceholderContent(extension, path.getFileName().toString());
+        try {
+            // Check if it's a mock path
+            if (filePath.startsWith("mock://")) {
+                System.out.println("Mock file detected, generating placeholder content");
+                String extension = getFileExtension(filePath);
+                return generatePlaceholderContent(extension, filePath);
+            }
+            
+            // Check if file exists using the storage service
+            System.out.println("Checking if file exists...");
+            if (!fileStorageService.fileExists(filePath)) {
+                System.err.println("File does not exist: " + filePath);
+                String extension = getFileExtension(filePath);
+                return generatePlaceholderContent(extension, filePath);
+            }
+            System.out.println("File exists, proceeding with extraction");
+            
+            // Build full path using base path
+            Path fullPath = Paths.get(basePath, filePath);
+            System.out.println("Full path for extraction: " + fullPath.toString());
+            System.out.println("File exists at full path: " + Files.exists(fullPath));
+            
+            // Use Apache Tika to extract content from all supported file types
+            System.out.println("Starting Tika content extraction...");
+            String content = tika.parseToString(fullPath);
+            
+            // Clean up the content
+            if (content != null && !content.trim().isEmpty()) {
+                System.out.println("Successfully extracted content, length: " + content.length());
+                System.out.println("Content preview: " + content.substring(0, Math.min(200, content.length())) + "...");
+                return content.trim();
+            } else {
+                // Fallback to placeholder if Tika couldn't extract content
+                System.out.println("Tika returned empty content, using placeholder");
+                String extension = getFileExtension(filePath);
+                return generatePlaceholderContent(extension, Paths.get(filePath).getFileName().toString());
+            }
+            
+        } catch (TikaException e) {
+            System.err.println("Tika parsing failed for file: " + filePath + ", error: " + e.getMessage());
+            e.printStackTrace();
+            // Fallback to placeholder content
+            String extension = getFileExtension(filePath);
+            return generatePlaceholderContent(extension, Paths.get(filePath).getFileName().toString());
+        } catch (Exception e) {
+            System.err.println("Unexpected error during content extraction: " + e.getMessage());
+            e.printStackTrace();
+            String extension = getFileExtension(filePath);
+            return generatePlaceholderContent(extension, Paths.get(filePath).getFileName().toString());
+        } finally {
+            System.out.println("=== CONTENT EXTRACTION END ===");
         }
     }
     
