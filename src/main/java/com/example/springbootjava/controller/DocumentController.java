@@ -1,14 +1,12 @@
 package com.example.springbootjava.controller;
 
 import com.example.springbootjava.dto.DocumentResponseDTO;
+import com.example.springbootjava.dto.QuizResponseDTO;
 import com.example.springbootjava.entity.Document;
 import com.example.springbootjava.entity.User;
 import com.example.springbootjava.entity.Flashcard;
 import com.example.springbootjava.entity.Quiz;
-import com.example.springbootjava.service.DocumentService;
-import com.example.springbootjava.service.LocalFileStorageService;
-import com.example.springbootjava.service.FileCleanupService;
-import com.example.springbootjava.service.FlashcardService;
+import com.example.springbootjava.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
@@ -41,6 +39,9 @@ public class DocumentController extends BaseController {
     
     @Autowired
     private FlashcardService flashcardService;
+    
+    @Autowired
+    private QuizService quizService;
     
     @GetMapping("/test")
     public ResponseEntity<?> testEndpoint(Authentication authentication) {
@@ -349,39 +350,49 @@ public class DocumentController extends BaseController {
     }
     
     @PostMapping("/{id}/generate-quiz")
-    public ResponseEntity<Quiz> generateQuizFromDocument(@PathVariable Long id,
+    public ResponseEntity<QuizResponseDTO> generateQuizFromDocument(@PathVariable Long id,
                                                        @RequestParam(defaultValue = "5") int numberOfQuestions,
                                                        Authentication authentication) {
         try {
+            System.out.println("=== GENERATE QUIZ REQUEST ===");
+            System.out.println("Document ID: " + id);
+            System.out.println("Number of Questions: " + numberOfQuestions);
+            
             User user = (User) authentication.getPrincipal();
+            System.out.println("User ID: " + user.getId());
+            
             Optional<Document> documentOpt = documentService.getDocumentById(id);
             
-            if (documentOpt.isEmpty() || !documentOpt.get().getUser().getId().equals(user.getId())) {
+            if (documentOpt.isEmpty()) {
+                System.out.println("Document not found for ID: " + id);
                 return ResponseEntity.notFound().build();
             }
             
             Document document = documentOpt.get();
+            System.out.println("Document found: " + document.getTitle());
+            System.out.println("Document owner ID: " + document.getUser().getId());
+            System.out.println("Document processing status: " + document.getProcessingStatus());
+            
+            if (!document.getUser().getId().equals(user.getId())) {
+                System.out.println("User does not own this document");
+                return ResponseEntity.notFound().build();
+            }
             
             // Check if document is processed
             if (document.getProcessingStatus() != Document.ProcessingStatus.COMPLETED) {
+                System.out.println("Document not completed, status: " + document.getProcessingStatus());
                 return ResponseEntity.badRequest().build();
             }
             
-            // For now, create a simple quiz - in a real implementation, you'd use AI service
-            Quiz quiz = new Quiz();
-            quiz.setTitle("Quiz: " + document.getTitle());
-            quiz.setDescription("Generated quiz from " + document.getTitle());
-            quiz.setTimeLimitMinutes(10);
-            quiz.setDifficulty(Quiz.Difficulty.MEDIUM);
-            quiz.setIsPublished(true);
-            quiz.setUser(user);
-            quiz.setCreatedAt(java.time.LocalDateTime.now());
-            quiz.setUpdatedAt(java.time.LocalDateTime.now());
+            System.out.println("Generating quiz from document...");
+            // Generate quiz from document using QuizService
+            Quiz quiz = quizService.generateQuizFromDocument(document, user, numberOfQuestions);
+            System.out.println("Generated quiz with ID: " + quiz.getId());
+            System.out.println("Quiz has " + (quiz.getQuestions() != null ? quiz.getQuestions().size() : 0) + " questions");
             
-            // Note: In a real implementation, you would generate quiz questions using AI service
-            // For now, we'll return the quiz structure without questions
-            
-            return ResponseEntity.ok(quiz);
+            // Convert Quiz entity to DTO for proper JSON serialization
+            QuizResponseDTO quizDTO = new QuizResponseDTO(quiz);
+            return ResponseEntity.ok(quizDTO);
             
         } catch (Exception e) {
             System.err.println("Error generating quiz: " + e.getMessage());

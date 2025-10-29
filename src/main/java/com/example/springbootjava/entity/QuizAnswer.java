@@ -3,6 +3,7 @@ package com.example.springbootjava.entity;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import com.fasterxml.jackson.annotation.JsonBackReference;
 
 import java.time.LocalDateTime;
 
@@ -33,6 +34,7 @@ public class QuizAnswer {
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "question_id", nullable = false)
+    @JsonBackReference
     private QuizQuestion question;
     
     public QuizAnswer() {

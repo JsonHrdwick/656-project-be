@@ -1,9 +1,9 @@
 package com.example.springbootjava.controller;
 
+import com.example.springbootjava.dto.QuizResponseDTO;
 import com.example.springbootjava.entity.Quiz;
 import com.example.springbootjava.entity.User;
-import com.example.springbootjava.repository.QuizRepository;
-import com.example.springbootjava.service.UserDetailsServiceImpl;
+import com.example.springbootjava.service.QuizService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -22,64 +22,77 @@ import java.util.Optional;
 public class QuizController {
 
     @Autowired
-    private QuizRepository quizRepository;
-
-    @Autowired
-    private UserDetailsServiceImpl userDetailsService;
+    private QuizService quizService;
 
     @GetMapping
-    public ResponseEntity<List<Quiz>> getAllQuizzes(
+    public ResponseEntity<List<QuizResponseDTO>> getAllQuizzes(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             Authentication authentication) {
         
         User user = (User) authentication.getPrincipal();
         Pageable pageable = PageRequest.of(page, size);
-        Page<Quiz> quizPage = quizRepository.findByUserOrderByCreatedAtDesc(user, pageable);
+        Page<Quiz> quizPage = quizService.getUserQuizzes(user, pageable);
         
-        return ResponseEntity.ok(quizPage.getContent());
+        List<QuizResponseDTO> quizDTOs = quizPage.getContent().stream()
+            .map(QuizResponseDTO::new)
+            .collect(java.util.stream.Collectors.toList());
+        
+        return ResponseEntity.ok(quizDTOs);
     }
 
     @GetMapping("/published")
-    public ResponseEntity<List<Quiz>> getPublishedQuizzes(
+    public ResponseEntity<List<QuizResponseDTO>> getPublishedQuizzes(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             Authentication authentication) {
         
         User user = (User) authentication.getPrincipal();
-        List<Quiz> quizzes = quizRepository.findPublishedByUser(user);
+        List<Quiz> quizzes = quizService.getPublishedQuizzes(user);
         
-        return ResponseEntity.ok(quizzes);
+        List<QuizResponseDTO> quizDTOs = quizzes.stream()
+            .map(QuizResponseDTO::new)
+            .collect(java.util.stream.Collectors.toList());
+        
+        return ResponseEntity.ok(quizDTOs);
     }
 
     @GetMapping("/difficulty/{difficulty}")
-    public ResponseEntity<List<Quiz>> getQuizzesByDifficulty(
+    public ResponseEntity<List<QuizResponseDTO>> getQuizzesByDifficulty(
             @PathVariable Quiz.Difficulty difficulty,
             Authentication authentication) {
         
         User user = (User) authentication.getPrincipal();
-        List<Quiz> quizzes = quizRepository.findByUserAndDifficulty(user, difficulty);
+        List<Quiz> quizzes = quizService.getQuizzesByDifficulty(user, difficulty);
         
-        return ResponseEntity.ok(quizzes);
+        List<QuizResponseDTO> quizDTOs = quizzes.stream()
+            .map(QuizResponseDTO::new)
+            .collect(java.util.stream.Collectors.toList());
+        
+        return ResponseEntity.ok(quizDTOs);
     }
 
     @GetMapping("/search")
-    public ResponseEntity<List<Quiz>> searchQuizzes(
+    public ResponseEntity<List<QuizResponseDTO>> searchQuizzes(
             @RequestParam String q,
             Authentication authentication) {
         
         User user = (User) authentication.getPrincipal();
-        List<Quiz> quizzes = quizRepository.findByUserAndSearchTerm(user, q);
+        List<Quiz> quizzes = quizService.searchQuizzes(user, q);
         
-        return ResponseEntity.ok(quizzes);
+        List<QuizResponseDTO> quizDTOs = quizzes.stream()
+            .map(QuizResponseDTO::new)
+            .collect(java.util.stream.Collectors.toList());
+        
+        return ResponseEntity.ok(quizDTOs);
     }
 
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Object>> getQuizStats(Authentication authentication) {
         User user = (User) authentication.getPrincipal();
         
-        long totalQuizzes = quizRepository.countByUser(user);
-        long publishedQuizzes = quizRepository.countPublishedByUser(user);
+        long totalQuizzes = quizService.getQuizCount(user);
+        long publishedQuizzes = quizService.getPublishedQuizCount(user);
         
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalQuizzes", totalQuizzes);
@@ -90,25 +103,27 @@ public class QuizController {
     }
 
     @PostMapping
-    public ResponseEntity<Quiz> createQuiz(@RequestBody Quiz quiz, Authentication authentication) {
+    public ResponseEntity<QuizResponseDTO> createQuiz(@RequestBody Quiz quiz, Authentication authentication) {
         User user = (User) authentication.getPrincipal();
         quiz.setUser(user);
         quiz.setCreatedAt(java.time.LocalDateTime.now());
         quiz.setUpdatedAt(java.time.LocalDateTime.now());
         
-        Quiz savedQuiz = quizRepository.save(quiz);
-        return ResponseEntity.ok(savedQuiz);
+        Quiz savedQuiz = quizService.createQuiz(quiz);
+        QuizResponseDTO quizDTO = new QuizResponseDTO(savedQuiz);
+        return ResponseEntity.ok(quizDTO);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Quiz> getQuizById(@PathVariable Long id, Authentication authentication) {
+    public ResponseEntity<QuizResponseDTO> getQuizById(@PathVariable Long id, Authentication authentication) {
         User user = (User) authentication.getPrincipal();
         
-        Optional<Quiz> quizOpt = quizRepository.findById(id);
+        Optional<Quiz> quizOpt = quizService.getQuizById(id);
         if (quizOpt.isPresent()) {
             Quiz quiz = quizOpt.get();
             if (quiz.getUser().getId().equals(user.getId())) {
-                return ResponseEntity.ok(quiz);
+                QuizResponseDTO quizDTO = new QuizResponseDTO(quiz);
+                return ResponseEntity.ok(quizDTO);
             } else {
                 return ResponseEntity.status(403).build();
             }
@@ -118,10 +133,10 @@ public class QuizController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Quiz> updateQuiz(@PathVariable Long id, @RequestBody Quiz quizDetails, Authentication authentication) {
+    public ResponseEntity<QuizResponseDTO> updateQuiz(@PathVariable Long id, @RequestBody Quiz quizDetails, Authentication authentication) {
         User user = (User) authentication.getPrincipal();
         
-        Optional<Quiz> quizOpt = quizRepository.findById(id);
+        Optional<Quiz> quizOpt = quizService.getQuizById(id);
         if (quizOpt.isPresent()) {
             Quiz quiz = quizOpt.get();
             if (quiz.getUser().getId().equals(user.getId())) {
@@ -132,8 +147,9 @@ public class QuizController {
                 quiz.setIsPublished(quizDetails.getIsPublished());
                 quiz.setUpdatedAt(java.time.LocalDateTime.now());
                 
-                Quiz updatedQuiz = quizRepository.save(quiz);
-                return ResponseEntity.ok(updatedQuiz);
+                Quiz updatedQuiz = quizService.updateQuiz(quiz);
+                QuizResponseDTO quizDTO = new QuizResponseDTO(updatedQuiz);
+                return ResponseEntity.ok(quizDTO);
             } else {
                 return ResponseEntity.status(403).build();
             }
@@ -146,11 +162,11 @@ public class QuizController {
     public ResponseEntity<Void> deleteQuiz(@PathVariable Long id, Authentication authentication) {
         User user = (User) authentication.getPrincipal();
         
-        Optional<Quiz> quizOpt = quizRepository.findById(id);
+        Optional<Quiz> quizOpt = quizService.getQuizById(id);
         if (quizOpt.isPresent()) {
             Quiz quiz = quizOpt.get();
             if (quiz.getUser().getId().equals(user.getId())) {
-                quizRepository.delete(quiz);
+                quizService.deleteQuiz(id);
                 return ResponseEntity.ok().build();
             } else {
                 return ResponseEntity.status(403).build();

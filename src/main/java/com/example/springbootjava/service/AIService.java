@@ -2,6 +2,7 @@ package com.example.springbootjava.service;
 
 import com.example.springbootjava.config.OpenAIConfig;
 import com.example.springbootjava.entity.Flashcard;
+import com.example.springbootjava.entity.QuizAnswer;
 import com.example.springbootjava.entity.QuizQuestion;
 import com.theokanning.openai.completion.chat.ChatCompletionRequest;
 import com.theokanning.openai.completion.chat.ChatMessage;
@@ -181,7 +182,7 @@ public class AIService {
         }
     }
     
-    public List<QuizQuestion> generateQuizQuestions(String content, int numberOfQuestions) {
+    public List<QuizQuestion> generateQuizQuestions(String content, String title, int numberOfQuestions) {
         try {
             // Limit content and questions to avoid token limits
             String limitedContent = content.length() > 3000 ? content.substring(0, 3000) : content;
@@ -250,6 +251,88 @@ public class AIService {
                 }
             }
             return questions;
+        }
+    }
+    
+    public List<QuizAnswer> generateQuizAnswers(String questionText) {
+        try {
+            List<ChatMessage> messages = new ArrayList<>();
+            messages.add(new ChatMessage(ChatMessageRole.SYSTEM.value(), 
+                "You are an AI assistant that creates multiple choice answers for quiz questions. " +
+                "Create 4 answer options for the given question. " +
+                "Format as: CORRECT_ANSWER|WRONG_ANSWER_1|WRONG_ANSWER_2|WRONG_ANSWER_3 " +
+                "Where the first answer is correct and the others are plausible but incorrect. " +
+                "Each answer should be concise (1-2 sentences max):"));
+            messages.add(new ChatMessage(ChatMessageRole.USER.value(), questionText));
+            
+            ChatCompletionRequest request = ChatCompletionRequest.builder()
+                .model(openAIConfig.getModel())
+                .messages(messages)
+                .maxTokens(300)
+                .temperature(0.7)
+                .build();
+            
+            String response = openAiService.createChatCompletion(request)
+                .getChoices()
+                .get(0)
+                .getMessage()
+                .getContent();
+            
+            // Parse the response into quiz answers
+            List<QuizAnswer> answers = new ArrayList<>();
+            if (response.contains("|")) {
+                String[] parts = response.split("\\|");
+                if (parts.length >= 4) {
+                    // Correct answer
+                    QuizAnswer correctAnswer = new QuizAnswer();
+                    correctAnswer.setAnswerText(parts[0].trim());
+                    correctAnswer.setIsCorrect(true);
+                    answers.add(correctAnswer);
+                    
+                    // Wrong answers
+                    for (int i = 1; i < parts.length && i < 4; i++) {
+                        QuizAnswer wrongAnswer = new QuizAnswer();
+                        wrongAnswer.setAnswerText(parts[i].trim());
+                        wrongAnswer.setIsCorrect(false);
+                        answers.add(wrongAnswer);
+                    }
+                }
+            }
+            
+            // If parsing failed, create fallback answers
+            if (answers.isEmpty()) {
+                QuizAnswer correctAnswer = new QuizAnswer();
+                correctAnswer.setAnswerText("This is the correct answer based on the content.");
+                correctAnswer.setIsCorrect(true);
+                answers.add(correctAnswer);
+                
+                for (int i = 1; i < 4; i++) {
+                    QuizAnswer wrongAnswer = new QuizAnswer();
+                    wrongAnswer.setAnswerText("This is an incorrect option " + i + ".");
+                    wrongAnswer.setIsCorrect(false);
+                    answers.add(wrongAnswer);
+                }
+            }
+            
+            return answers;
+            
+        } catch (Exception e) {
+            // Fallback to simple answer generation
+            List<QuizAnswer> answers = new ArrayList<>();
+            
+            QuizAnswer correctAnswer = new QuizAnswer();
+            correctAnswer.setAnswerText("This is the correct answer based on the content.");
+            correctAnswer.setIsCorrect(true);
+            answers.add(correctAnswer);
+            
+            for (int i = 1; i < 4; i++) {
+                QuizAnswer wrongAnswer = new QuizAnswer();
+                wrongAnswer.setAnswerText("This is an incorrect option " + i + ".");
+                wrongAnswer.setIsCorrect(false);
+                answers.add(wrongAnswer);
+            }
+            
+            return answers;
         }
     }
     
