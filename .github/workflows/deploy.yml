@@ -48,7 +48,7 @@ jobs:
             mkdir -p ~/app
             
             # Create or update environment file (systemd compatible format)
-            # Write each variable separately to avoid nested heredoc issues
+            # Directly write values from GitHub secrets to .env file
             echo "PORT=${{ secrets.PORT }}" > ~/app/.env
             echo "PGHOST=${{ secrets.PGHOST }}" >> ~/app/.env
             echo "PGPORT=${{ secrets.PGPORT }}" >> ~/app/.env
@@ -61,29 +61,42 @@ jobs:
             echo "OPENAI_MODEL=${{ secrets.OPENAI_MODEL }}" >> ~/app/.env
             echo "OPENAI_MAX_TOKENS=${{ secrets.OPENAI_MAX_TOKENS }}" >> ~/app/.env
             echo "DOCUMENT_STORAGE_PATH=${{ secrets.DOCUMENT_STORAGE_PATH }}" >> ~/app/.env
-            chmod 600 ~/app/.env
             
-            # Set defaults for optional variables if not provided
-            if ! grep -q "^PORT=" ~/app/.env || grep -q "^PORT=$" ~/app/.env; then
-              sed -i 's/^PORT=$/PORT=8080/' ~/app/.env || echo "PORT=8080" >> ~/app/.env
+            # Set defaults for empty values
+            if [ -z "$(grep '^PORT=' ~/app/.env | cut -d'=' -f2)" ]; then
+              sed -i 's/^PORT=$/PORT=8080/' ~/app/.env || sed -i '1iPORT=8080' ~/app/.env
             fi
-            if ! grep -q "^PGPORT=" ~/app/.env || grep -q "^PGPORT=$" ~/app/.env; then
+            if [ -z "$(grep '^PGPORT=' ~/app/.env | cut -d'=' -f2)" ]; then
               sed -i 's/^PGPORT=$/PGPORT=5432/' ~/app/.env || echo "PGPORT=5432" >> ~/app/.env
             fi
-            if ! grep -q "^PGUSER=" ~/app/.env || grep -q "^PGUSER=$" ~/app/.env; then
+            if [ -z "$(grep '^PGUSER=' ~/app/.env | cut -d'=' -f2)" ]; then
               sed -i 's/^PGUSER=$/PGUSER=postgres/' ~/app/.env || echo "PGUSER=postgres" >> ~/app/.env
             fi
-            if ! grep -q "^JWT_EXPIRATION=" ~/app/.env || grep -q "^JWT_EXPIRATION=$" ~/app/.env; then
+            if [ -z "$(grep '^JWT_EXPIRATION=' ~/app/.env | cut -d'=' -f2)" ]; then
               sed -i 's/^JWT_EXPIRATION=$/JWT_EXPIRATION=86400000/' ~/app/.env || echo "JWT_EXPIRATION=86400000" >> ~/app/.env
             fi
-            if ! grep -q "^OPENAI_MODEL=" ~/app/.env || grep -q "^OPENAI_MODEL=$" ~/app/.env; then
+            if [ -z "$(grep '^OPENAI_MODEL=' ~/app/.env | cut -d'=' -f2)" ]; then
               sed -i 's/^OPENAI_MODEL=$/OPENAI_MODEL=gpt-3.5-turbo/' ~/app/.env || echo "OPENAI_MODEL=gpt-3.5-turbo" >> ~/app/.env
             fi
-            if ! grep -q "^OPENAI_MAX_TOKENS=" ~/app/.env || grep -q "^OPENAI_MAX_TOKENS=$" ~/app/.env; then
+            if [ -z "$(grep '^OPENAI_MAX_TOKENS=' ~/app/.env | cut -d'=' -f2)" ]; then
               sed -i 's/^OPENAI_MAX_TOKENS=$/OPENAI_MAX_TOKENS=1000/' ~/app/.env || echo "OPENAI_MAX_TOKENS=1000" >> ~/app/.env
             fi
-            if ! grep -q "^DOCUMENT_STORAGE_PATH=" ~/app/.env || grep -q "^DOCUMENT_STORAGE_PATH=$" ~/app/.env; then
+            if [ -z "$(grep '^DOCUMENT_STORAGE_PATH=' ~/app/.env | cut -d'=' -f2)" ]; then
               sed -i "s|^DOCUMENT_STORAGE_PATH=\$|DOCUMENT_STORAGE_PATH=\$HOME/app/uploads|" ~/app/.env || echo "DOCUMENT_STORAGE_PATH=\$HOME/app/uploads" >> ~/app/.env
+            fi
+            
+            chmod 600 ~/app/.env
+            
+            # Verify .env file contents (for debugging)
+            if [ -f ~/app/.env ]; then
+              echo "Environment file created. Variables:"
+              echo "- PGHOST: $(grep '^PGHOST=' ~/app/.env | cut -d'=' -f2 | sed 's/./*/g' | head -c 10)..."
+              echo "- PGPORT: $(grep '^PGPORT=' ~/app/.env | cut -d'=' -f2)"
+              echo "- PGDATABASE: $(grep '^PGDATABASE=' ~/app/.env | cut -d'=' -f2 | head -c 20)..."
+              echo "- Total variables: $(wc -l < ~/app/.env)"
+            else
+              echo "ERROR: .env file was not created!"
+              exit 1
             fi
             
             # Stop previous app if running (using systemd if service exists)
@@ -113,14 +126,27 @@ jobs:
             
             # Start app using systemd if service exists, otherwise use nohup
             if [ -f /etc/systemd/system/springboot-app.service ]; then
+              # Verify .env file is readable by systemd (must not have spaces around =)
+              # Clean up any potential formatting issues
+              sed -i 's/ *= */=/' ~/app/.env
+              sed -i '/^$/d' ~/app/.env
+              
+              # Test if systemd can read the environment file
+              echo "Testing environment file format..."
+              if systemctl show-environment 2>/dev/null > /dev/null; then
+                echo "Systemd environment check passed"
+              fi
+              
               sudo systemctl daemon-reload
               sudo systemctl start springboot-app.service
               if [ $? -eq 0 ]; then
                 echo "Started using systemd service"
-                sleep 2
+                sleep 3
                 sudo systemctl status springboot-app.service --no-pager -l || true
               else
-                echo "Failed to start systemd service, falling back to nohup"
+                echo "Failed to start systemd service, checking logs..."
+                sudo journalctl -u springboot-app -n 20 --no-pager || true
+                echo "Falling back to nohup..."
                 # Load environment variables and start app in background
                 set -a
                 source ~/app/.env
