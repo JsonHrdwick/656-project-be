@@ -32,7 +32,7 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      # Copy systemd service file if it exists
+      # Copy systemd service file if it exists (optional - for better process management)
       - name: Copy systemd service file to EC2
         run: |
           if [ -f springboot-app.service ]; then
@@ -96,20 +96,38 @@ jobs:
             # Wait a moment for process to stop
             sleep 2
             
-            # Install systemd service if file exists and not already installed
+            # Install systemd service if file exists and not already installed (optional)
+            # Systemd provides auto-restart, better logging, and runs as a system service
+            # If not using systemd, the app will run via nohup (also works fine)
             if [ -f ~/springboot-app.service ] && [ ! -f /etc/systemd/system/springboot-app.service ]; then
-              sudo cp ~/springboot-app.service /etc/systemd/system/
+              # Update user and paths in service file based on actual user
+              CURRENT_USER=$(whoami)
+              CURRENT_HOME=$(eval echo ~$CURRENT_USER)
+              sed "s|/home/ec2-user|$CURRENT_HOME|g" ~/springboot-app.service > /tmp/springboot-app.service
+              sudo cp /tmp/springboot-app.service /etc/systemd/system/springboot-app.service
               sudo chmod 644 /etc/systemd/system/springboot-app.service
               sudo systemctl daemon-reload
               sudo systemctl enable springboot-app.service
-              echo "Systemd service installed"
+              echo "Systemd service installed for user: $CURRENT_USER"
             fi
             
             # Start app using systemd if service exists, otherwise use nohup
             if [ -f /etc/systemd/system/springboot-app.service ]; then
               sudo systemctl daemon-reload
               sudo systemctl start springboot-app.service
-              echo "Started using systemd service"
+              if [ $? -eq 0 ]; then
+                echo "Started using systemd service"
+                sleep 2
+                sudo systemctl status springboot-app.service --no-pager -l || true
+              else
+                echo "Failed to start systemd service, falling back to nohup"
+                # Load environment variables and start app in background
+                set -a
+                source ~/app/.env
+                set +a
+                nohup java -Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -jar ~/app/app.jar > ~/app/app.log 2>&1 &
+                echo "Started using nohup"
+              fi
             else
               # Load environment variables and start app in background
               set -a
@@ -124,7 +142,17 @@ jobs:
             sleep 3
             if pgrep -f "app.jar" > /dev/null || systemctl is-active --quiet springboot-app.service 2>/dev/null; then
               echo "Application is running"
+              if systemctl is-active --quiet springboot-app.service 2>/dev/null; then
+                echo "View logs with: sudo journalctl -u springboot-app -f"
+              else
+                echo "View logs with: tail -f ~/app/app.log"
+              fi
             else
-              echo "WARNING: Application may not have started. Check logs with: tail -f ~/app/app.log"
+              echo "WARNING: Application may not have started. Check logs:"
+              if [ -f /etc/systemd/system/springboot-app.service ]; then
+                echo "  sudo journalctl -u springboot-app -n 50"
+              else
+                echo "  tail -f ~/app/app.log"
+              fi
             fi
           EOF
