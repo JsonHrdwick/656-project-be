@@ -1,4 +1,4 @@
-name: Deploy Spring Boot to EC2
+name: Deploy Spring Boot Gradle to EC2
 
 on:
   push:
@@ -10,19 +10,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # Build the JAR using Maven
+      # Setup Java
       - name: Set up Java
         uses: actions/setup-java@v3
         with:
           distribution: temurin
           java-version: 17
 
+      # Build JAR using Gradle
       - name: Build JAR
-        run: mvn clean package -DskipTests
+        run: ./gradlew clean bootJar --no-daemon
 
+      # Setup SSH
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
@@ -30,9 +32,10 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
+      # Deploy JAR to EC2
       - name: Deploy JAR to EC2
         run: |
-          scp -i ~/.ssh/id_rsa target/*.jar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/app/app.jar
+          scp -i ~/.ssh/id_rsa build/libs/*.jar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/app/app.jar
           ssh -i ~/.ssh/id_rsa ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
             # Stop previous app if running
             if pgrep -f "app.jar" > /dev/null; then
