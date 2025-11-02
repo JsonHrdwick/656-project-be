@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up SSH key
@@ -20,26 +20,22 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
 
       - name: Add EC2 host to known_hosts
-        run: |
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+        run: ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy to EC2
-        run: |
-          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            # Go to your app directory
-            cd ~/app
+      - name: Test SSH connection
+        run: ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SSH OK'"
 
-            # If the repo isn’t there, clone it; otherwise, pull updates
+      - name: Deploy app
+        run: |
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            cd ~/app || mkdir ~/app && cd ~/app
             if [ ! -d ".git" ]; then
               git clone https://github.com/${{ github.repository }} .
             else
+              git reset --hard
               git pull origin main
             fi
-
-            # Example for Node.js: install and restart
             npm install --production
-
-            # Start or restart app (PM2 keeps it running)
             if ! command -v pm2 &> /dev/null; then
               sudo npm install -g pm2
             fi
