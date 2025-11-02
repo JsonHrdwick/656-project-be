@@ -1,4 +1,4 @@
-name: Deploy to EC2
+name: Deploy Spring Boot to EC2
 
 on:
   push:
@@ -6,38 +6,38 @@ on:
       - main
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up SSH key
+      # Build the JAR using Maven
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build JAR
+        run: mvn clean package -DskipTests
+
+      - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-      
-      - name: Add EC2 to known_hosts
-        run: ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-      
-      - name: Test SSH
-        run: ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SSH OK'"
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy app
+      - name: Deploy JAR to EC2
         run: |
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            cd ~/656-backend || mkdir ~/656-backend && cd ~/656-backend
-            if [ ! -d ".git" ]; then
-              git clone https://github.com/${{ github.repository }} .
-            else
-              git reset --hard
-              git pull origin main
+          scp -i ~/.ssh/id_rsa target/*.jar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/app/app.jar
+          ssh -i ~/.ssh/id_rsa ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            # Stop previous app if running
+            if pgrep -f "app.jar" > /dev/null; then
+              pkill -f "app.jar"
             fi
-            npm install --production
-            if ! command -v pm2 &> /dev/null; then
-              sudo npm install -g pm2
-            fi
-            pm2 restart all || pm2 start npm -- start
+            # Start app in background
+            nohup java -jar ~/app/app.jar > ~/app/app.log 2>&1 &
           EOF
