@@ -62,38 +62,41 @@ jobs:
             echo "OPENAI_MAX_TOKENS=${{ secrets.OPENAI_MAX_TOKENS }}" >> ~/app/.env
             echo "DOCUMENT_STORAGE_PATH=${{ secrets.DOCUMENT_STORAGE_PATH }}" >> ~/app/.env
             
-            # Set defaults for empty values
-            if [ -z "$(grep '^PORT=' ~/app/.env | cut -d'=' -f2)" ]; then
-              sed -i 's/^PORT=$/PORT=8080/' ~/app/.env || sed -i '1iPORT=8080' ~/app/.env
+            # Set defaults for empty values - handle both empty secrets and missing values
+            # Use awk for more reliable processing
+            awk -F= '
+              /^PORT=$|^PORT[[:space:]]*$/ { $0="PORT=8080" }
+              /^PGPORT=$|^PGPORT[[:space:]]*$/ { $0="PGPORT=5432" }
+              /^PGUSER=$|^PGUSER[[:space:]]*$/ { $0="PGUSER=postgres" }
+              /^JWT_EXPIRATION=$|^JWT_EXPIRATION[[:space:]]*$/ { $0="JWT_EXPIRATION=86400000" }
+              /^OPENAI_MODEL=$|^OPENAI_MODEL[[:space:]]*$/ { $0="OPENAI_MODEL=gpt-3.5-turbo" }
+              /^OPENAI_MAX_TOKENS=$|^OPENAI_MAX_TOKENS[[:space:]]*$/ { $0="OPENAI_MAX_TOKENS=1000" }
+              { print }
+            ' ~/app/.env > ~/app/.env.tmp && mv ~/app/.env.tmp ~/app/.env
+            
+            # Handle DOCUMENT_STORAGE_PATH with variable expansion
+            CURRENT_HOME=$(eval echo ~$(whoami))
+            if grep -q '^DOCUMENT_STORAGE_PATH=$' ~/app/.env || ! grep -q '^DOCUMENT_STORAGE_PATH=' ~/app/.env; then
+              sed -i "s|^DOCUMENT_STORAGE_PATH=.*|DOCUMENT_STORAGE_PATH=$CURRENT_HOME/app/uploads|" ~/app/.env
+              grep -q '^DOCUMENT_STORAGE_PATH=' ~/app/.env || echo "DOCUMENT_STORAGE_PATH=$CURRENT_HOME/app/uploads" >> ~/app/.env
             fi
-            if [ -z "$(grep '^PGPORT=' ~/app/.env | cut -d'=' -f2)" ]; then
-              sed -i 's/^PGPORT=$/PGPORT=5432/' ~/app/.env || echo "PGPORT=5432" >> ~/app/.env
-            fi
-            if [ -z "$(grep '^PGUSER=' ~/app/.env | cut -d'=' -f2)" ]; then
-              sed -i 's/^PGUSER=$/PGUSER=postgres/' ~/app/.env || echo "PGUSER=postgres" >> ~/app/.env
-            fi
-            if [ -z "$(grep '^JWT_EXPIRATION=' ~/app/.env | cut -d'=' -f2)" ]; then
-              sed -i 's/^JWT_EXPIRATION=$/JWT_EXPIRATION=86400000/' ~/app/.env || echo "JWT_EXPIRATION=86400000" >> ~/app/.env
-            fi
-            if [ -z "$(grep '^OPENAI_MODEL=' ~/app/.env | cut -d'=' -f2)" ]; then
-              sed -i 's/^OPENAI_MODEL=$/OPENAI_MODEL=gpt-3.5-turbo/' ~/app/.env || echo "OPENAI_MODEL=gpt-3.5-turbo" >> ~/app/.env
-            fi
-            if [ -z "$(grep '^OPENAI_MAX_TOKENS=' ~/app/.env | cut -d'=' -f2)" ]; then
-              sed -i 's/^OPENAI_MAX_TOKENS=$/OPENAI_MAX_TOKENS=1000/' ~/app/.env || echo "OPENAI_MAX_TOKENS=1000" >> ~/app/.env
-            fi
-            if [ -z "$(grep '^DOCUMENT_STORAGE_PATH=' ~/app/.env | cut -d'=' -f2)" ]; then
-              sed -i "s|^DOCUMENT_STORAGE_PATH=\$|DOCUMENT_STORAGE_PATH=\$HOME/app/uploads|" ~/app/.env || echo "DOCUMENT_STORAGE_PATH=\$HOME/app/uploads" >> ~/app/.env
-            fi
+            
+            # Ensure PORT exists (in case file was empty)
+            grep -q '^PORT=' ~/app/.env || echo "PORT=8080" >> ~/app/.env
             
             chmod 600 ~/app/.env
             
             # Verify .env file contents (for debugging)
             if [ -f ~/app/.env ]; then
               echo "Environment file created. Variables:"
-              echo "- PGHOST: $(grep '^PGHOST=' ~/app/.env | cut -d'=' -f2 | sed 's/./*/g' | head -c 10)..."
-              echo "- PGPORT: $(grep '^PGPORT=' ~/app/.env | cut -d'=' -f2)"
-              echo "- PGDATABASE: $(grep '^PGDATABASE=' ~/app/.env | cut -d'=' -f2 | head -c 20)..."
+              PGHOST_VAL=$(grep '^PGHOST=' ~/app/.env | cut -d'=' -f2-)
+              PGPORT_VAL=$(grep '^PGPORT=' ~/app/.env | cut -d'=' -f2-)
+              PGDATABASE_VAL=$(grep '^PGDATABASE=' ~/app/.env | cut -d'=' -f2-)
+              echo "- PGHOST: ${PGHOST_VAL:+set (${#PGHOST_VAL} chars)}${PGHOST_VAL:-not set}"
+              echo "- PGPORT: ${PGPORT_VAL:-not set, using default}"
+              echo "- PGDATABASE: ${PGDATABASE_VAL:+set}${PGDATABASE_VAL:-not set}"
               echo "- Total variables: $(wc -l < ~/app/.env)"
+              echo "- File size: $(wc -c < ~/app/.env) bytes"
             else
               echo "ERROR: .env file was not created!"
               exit 1
@@ -109,19 +112,25 @@ jobs:
             # Wait a moment for process to stop
             sleep 2
             
-            # Install systemd service if file exists and not already installed (optional)
-            # Systemd provides auto-restart, better logging, and runs as a system service
-            # If not using systemd, the app will run via nohup (also works fine)
-            if [ -f ~/springboot-app.service ] && [ ! -f /etc/systemd/system/springboot-app.service ]; then
+            # Install/update systemd service if file exists
+            # Always reinstall to ensure latest version without postgresql dependency
+            if [ -f ~/springboot-app.service ]; then
               # Update user and paths in service file based on actual user
               CURRENT_USER=$(whoami)
               CURRENT_HOME=$(eval echo ~$CURRENT_USER)
               sed "s|/home/ec2-user|$CURRENT_HOME|g" ~/springboot-app.service > /tmp/springboot-app.service
+              # Also update any other potential user paths
+              sed -i "s|/home/ubuntu|$CURRENT_HOME|g" /tmp/springboot-app.service
+              # Ensure no postgresql dependencies remain
+              sed -i '/Requires=postgresql/d' /tmp/springboot-app.service
+              sed -i '/After=.*postgresql/d' /tmp/springboot-app.service
+              # Copy and enable service
               sudo cp /tmp/springboot-app.service /etc/systemd/system/springboot-app.service
               sudo chmod 644 /etc/systemd/system/springboot-app.service
               sudo systemctl daemon-reload
               sudo systemctl enable springboot-app.service
-              echo "Systemd service installed for user: $CURRENT_USER"
+              echo "Systemd service installed/updated for user: $CURRENT_USER"
+              echo "Service file location: /etc/systemd/system/springboot-app.service"
             fi
             
             # Start app using systemd if service exists, otherwise use nohup
