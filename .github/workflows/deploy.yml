@@ -32,15 +32,99 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
+      # Copy systemd service file if it exists
+      - name: Copy systemd service file to EC2
+        run: |
+          if [ -f springboot-app.service ]; then
+            scp -i ~/.ssh/id_rsa springboot-app.service ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/springboot-app.service
+          fi
+
       # Deploy JAR to EC2
       - name: Deploy JAR to EC2
         run: |
           scp -i ~/.ssh/id_rsa build/libs/*.jar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/app/app.jar
-          ssh -i ~/.ssh/id_rsa ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            # Stop previous app if running
-            if pgrep -f "app.jar" > /dev/null; then
+          ssh -i ~/.ssh/id_rsa ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
+            # Create app directory if it doesn't exist
+            mkdir -p ~/app
+            
+            # Create or update environment file (systemd compatible format)
+            # Write each variable separately to avoid nested heredoc issues
+            echo "PORT=${{ secrets.PORT }}" > ~/app/.env
+            echo "PGHOST=${{ secrets.PGHOST }}" >> ~/app/.env
+            echo "PGPORT=${{ secrets.PGPORT }}" >> ~/app/.env
+            echo "PGDATABASE=${{ secrets.PGDATABASE }}" >> ~/app/.env
+            echo "PGUSER=${{ secrets.PGUSER }}" >> ~/app/.env
+            echo "PGPASSWORD=${{ secrets.PGPASSWORD }}" >> ~/app/.env
+            echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> ~/app/.env
+            echo "JWT_EXPIRATION=${{ secrets.JWT_EXPIRATION }}" >> ~/app/.env
+            echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> ~/app/.env
+            echo "OPENAI_MODEL=${{ secrets.OPENAI_MODEL }}" >> ~/app/.env
+            echo "OPENAI_MAX_TOKENS=${{ secrets.OPENAI_MAX_TOKENS }}" >> ~/app/.env
+            echo "DOCUMENT_STORAGE_PATH=${{ secrets.DOCUMENT_STORAGE_PATH }}" >> ~/app/.env
+            chmod 600 ~/app/.env
+            
+            # Set defaults for optional variables if not provided
+            if ! grep -q "^PORT=" ~/app/.env || grep -q "^PORT=$" ~/app/.env; then
+              sed -i 's/^PORT=$/PORT=8080/' ~/app/.env || echo "PORT=8080" >> ~/app/.env
+            fi
+            if ! grep -q "^PGPORT=" ~/app/.env || grep -q "^PGPORT=$" ~/app/.env; then
+              sed -i 's/^PGPORT=$/PGPORT=5432/' ~/app/.env || echo "PGPORT=5432" >> ~/app/.env
+            fi
+            if ! grep -q "^PGUSER=" ~/app/.env || grep -q "^PGUSER=$" ~/app/.env; then
+              sed -i 's/^PGUSER=$/PGUSER=postgres/' ~/app/.env || echo "PGUSER=postgres" >> ~/app/.env
+            fi
+            if ! grep -q "^JWT_EXPIRATION=" ~/app/.env || grep -q "^JWT_EXPIRATION=$" ~/app/.env; then
+              sed -i 's/^JWT_EXPIRATION=$/JWT_EXPIRATION=86400000/' ~/app/.env || echo "JWT_EXPIRATION=86400000" >> ~/app/.env
+            fi
+            if ! grep -q "^OPENAI_MODEL=" ~/app/.env || grep -q "^OPENAI_MODEL=$" ~/app/.env; then
+              sed -i 's/^OPENAI_MODEL=$/OPENAI_MODEL=gpt-3.5-turbo/' ~/app/.env || echo "OPENAI_MODEL=gpt-3.5-turbo" >> ~/app/.env
+            fi
+            if ! grep -q "^OPENAI_MAX_TOKENS=" ~/app/.env || grep -q "^OPENAI_MAX_TOKENS=$" ~/app/.env; then
+              sed -i 's/^OPENAI_MAX_TOKENS=$/OPENAI_MAX_TOKENS=1000/' ~/app/.env || echo "OPENAI_MAX_TOKENS=1000" >> ~/app/.env
+            fi
+            if ! grep -q "^DOCUMENT_STORAGE_PATH=" ~/app/.env || grep -q "^DOCUMENT_STORAGE_PATH=$" ~/app/.env; then
+              sed -i "s|^DOCUMENT_STORAGE_PATH=\$|DOCUMENT_STORAGE_PATH=\$HOME/app/uploads|" ~/app/.env || echo "DOCUMENT_STORAGE_PATH=\$HOME/app/uploads" >> ~/app/.env
+            fi
+            
+            # Stop previous app if running (using systemd if service exists)
+            if systemctl is-active --quiet springboot-app.service 2>/dev/null; then
+              sudo systemctl stop springboot-app.service
+            elif pgrep -f "app.jar" > /dev/null; then
               pkill -f "app.jar"
             fi
-            # Start app in background
-            nohup java -jar ~/app/app.jar > ~/app/app.log 2>&1 &
+            
+            # Wait a moment for process to stop
+            sleep 2
+            
+            # Install systemd service if file exists and not already installed
+            if [ -f ~/springboot-app.service ] && [ ! -f /etc/systemd/system/springboot-app.service ]; then
+              sudo cp ~/springboot-app.service /etc/systemd/system/
+              sudo chmod 644 /etc/systemd/system/springboot-app.service
+              sudo systemctl daemon-reload
+              sudo systemctl enable springboot-app.service
+              echo "Systemd service installed"
+            fi
+            
+            # Start app using systemd if service exists, otherwise use nohup
+            if [ -f /etc/systemd/system/springboot-app.service ]; then
+              sudo systemctl daemon-reload
+              sudo systemctl start springboot-app.service
+              echo "Started using systemd service"
+            else
+              # Load environment variables and start app in background
+              set -a
+              source ~/app/.env
+              set +a
+              nohup java -Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -jar ~/app/app.jar > ~/app/app.log 2>&1 &
+              echo "Started using nohup"
+            fi
+            
+            # Show status
+            echo "Deployment complete. Checking status..."
+            sleep 3
+            if pgrep -f "app.jar" > /dev/null || systemctl is-active --quiet springboot-app.service 2>/dev/null; then
+              echo "Application is running"
+            else
+              echo "WARNING: Application may not have started. Check logs with: tail -f ~/app/app.log"
+            fi
           EOF

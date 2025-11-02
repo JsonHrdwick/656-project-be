@@ -164,20 +164,40 @@ public class AIService {
             return flashcards;
             
         } catch (Exception e) {
-            // Fallback to simple flashcard generation
+            System.err.println("AI Service failed to generate flashcards: " + e.getMessage());
+            e.printStackTrace();
+            
+            // Fallback to simple flashcard generation based on actual content
             List<Flashcard> flashcards = new ArrayList<>();
             String limitedContent = content.length() > 2000 ? content.substring(0, 2000) : content;
+            
+            // Try to extract meaningful sentences from the content
             String[] sentences = limitedContent.split("[.!?]+");
-            for (int i = 0; i < Math.min(2, sentences.length); i++) {
-                if (sentences[i].trim().length() > 10) {
+            int flashcardCount = 0;
+            
+            for (String sentence : sentences) {
+                if (sentence.trim().length() > 20 && flashcardCount < 3) {
                     Flashcard flashcard = new Flashcard();
-                    flashcard.setQuestion("What is the main point of: " + sentences[i].trim() + "?");
-                    flashcard.setAnswer("This is a sample answer. In production, AI would generate a proper answer.");
+                    flashcard.setQuestion("What does this statement mean: \"" + sentence.trim() + "\"?");
+                    flashcard.setAnswer("This statement discusses: " + sentence.trim() + ". (AI service temporarily unavailable - using content-based fallback)");
                     flashcard.setCategory(category);
                     flashcard.setDifficulty(Flashcard.Difficulty.MEDIUM);
                     flashcards.add(flashcard);
+                    flashcardCount++;
                 }
             }
+            
+            // If no meaningful sentences found, create a generic flashcard
+            if (flashcards.isEmpty()) {
+                Flashcard flashcard = new Flashcard();
+                flashcard.setQuestion("What is the main topic of this " + category + " document?");
+                flashcard.setAnswer("This document covers topics related to " + category + ". (AI service temporarily unavailable)");
+                flashcard.setCategory(category);
+                flashcard.setDifficulty(Flashcard.Difficulty.MEDIUM);
+                flashcards.add(flashcard);
+            }
+            
+            System.out.println("Generated " + flashcards.size() + " fallback flashcards due to AI service error");
             return flashcards;
         }
     }

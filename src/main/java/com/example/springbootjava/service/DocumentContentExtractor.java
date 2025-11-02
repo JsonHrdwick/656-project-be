@@ -37,7 +37,8 @@ public class DocumentContentExtractor {
             
             // Check if file exists using the storage service
             System.out.println("Checking if file exists...");
-            if (!fileStorageService.fileExists(filePath)) {
+            String pathForCheck = filePath.startsWith("uploads/") ? filePath.substring(7) : filePath;
+            if (!fileStorageService.fileExists(pathForCheck)) {
                 System.err.println("File does not exist: " + filePath);
                 String extension = getFileExtension(filePath);
                 return generatePlaceholderContent(extension, filePath);
@@ -45,7 +46,14 @@ public class DocumentContentExtractor {
             System.out.println("File exists, proceeding with extraction");
             
             // Build full path using base path
-            Path fullPath = Paths.get(basePath, filePath);
+            Path fullPath;
+            if (filePath.startsWith("uploads/")) {
+                // File path already includes uploads prefix, use it directly
+                fullPath = Paths.get(basePath, filePath.substring(7)); // Remove "uploads/" prefix
+            } else {
+                // File path doesn't include uploads prefix, combine with base path
+                fullPath = Paths.get(basePath, filePath);
+            }
             System.out.println("Full path for extraction: " + fullPath.toString());
             System.out.println("File exists at full path: " + Files.exists(fullPath));
             

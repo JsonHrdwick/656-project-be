@@ -1,0 +1,20 @@
+[Unit]
+Description=Spring Boot Application
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/app
+EnvironmentFile=/home/ec2-user/app/.env
+ExecStart=/usr/bin/java -Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication -XX:+UseCompressedOops -XX:+UseCompressedClassPointers -XX:+TieredCompilation -XX:TieredStopAtLevel=1 -XX:+DisableExplicitGC -Djava.awt.headless=true -Dfile.encoding=UTF-8 -Duser.timezone=UTC -jar /home/ec2-user/app/app.jar
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=springboot-app
+
+[Install]
+WantedBy=multi-user.target
+

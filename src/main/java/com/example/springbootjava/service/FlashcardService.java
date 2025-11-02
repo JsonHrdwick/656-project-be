@@ -79,16 +79,27 @@ public class FlashcardService {
         // Extract content from the document file since content is not stored in database
         String content;
         try {
+            System.out.println("=== FLASHCARD GENERATION START ===");
+            System.out.println("Document ID: " + document.getId());
+            System.out.println("Document title: " + document.getTitle());
+            System.out.println("Document file path: " + document.getFilePath());
+            System.out.println("Document file type: " + document.getFileType());
+            
             if (document.getFilePath() != null && !document.getFilePath().startsWith("mock://")) {
                 // Extract real content from file
+                System.out.println("Attempting to extract real content from file...");
                 content = contentExtractor.extractContent(document.getFilePath());
+                System.out.println("Content extraction successful, length: " + (content != null ? content.length() : 0));
             } else {
+                System.out.println("Mock file detected or no file path, using simulated content");
                 // Generate simulated content for mock files or when file path is not available
                 content = generateSimulatedContent(document.getFileType(), document.getTitle());
             }
         } catch (Exception e) {
             System.err.println("Error extracting content from document: " + e.getMessage());
-            // Fallback to simulated content
+            e.printStackTrace();
+            // Only fallback to simulated content if we absolutely can't extract anything
+            System.out.println("Falling back to simulated content due to extraction error");
             content = generateSimulatedContent(document.getFileType(), document.getTitle());
         }
         
@@ -96,10 +107,12 @@ public class FlashcardService {
             throw new RuntimeException("Could not extract content from document");
         }
         
+        System.out.println("Generating flashcards using AI service...");
         List<Flashcard> flashcards = aiService.generateFlashcards(
                 content, 
                 document.getTitle()
         );
+        System.out.println("AI service generated " + flashcards.size() + " flashcards");
         
         // Set user and document for each flashcard
         for (Flashcard flashcard : flashcards) {
@@ -107,7 +120,11 @@ public class FlashcardService {
             flashcard.setDocument(document);
         }
         
-        return flashcardRepository.saveAll(flashcards);
+        List<Flashcard> savedFlashcards = flashcardRepository.saveAll(flashcards);
+        System.out.println("Saved " + savedFlashcards.size() + " flashcards to database");
+        System.out.println("=== FLASHCARD GENERATION END ===");
+        
+        return savedFlashcards;
     }
     
     private String generateSimulatedContent(String fileType, String title) {
