@@ -14,6 +14,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -161,17 +162,31 @@ class DocumentServiceTest {
     }
 
     @Test
-    void testDeleteDocument_Success() {
-        when(documentRepository.findById(1L)).thenReturn(Optional.of(testDocument));
-        when(fileStorageService.fileExists(anyString())).thenReturn(true);
+    void testDeleteDocument_Success() throws Exception {
+        // Set up document with a real file path (not mock://)
+        Document docToDelete = new Document();
+        docToDelete.setId(1L);
+        docToDelete.setTitle("Test Document");
+        docToDelete.setFileName("test.pdf");
+        docToDelete.setFileType("PDF");
+        docToDelete.setFilePath("uploads/user_1/test.pdf"); // Real path, not mock
+        docToDelete.setFileSize(1024L);
+        docToDelete.setUser(testUser);
+        
+        // Use reflection to set localStorageEnabled to true for this test
+        Field localStorageEnabledField = DocumentService.class.getDeclaredField("localStorageEnabled");
+        localStorageEnabledField.setAccessible(true);
+        localStorageEnabledField.set(documentService, true);
+        
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(docToDelete));
         when(fileStorageService.deleteFile(anyString())).thenReturn(true);
         doNothing().when(documentRepository).delete(any(Document.class));
-
+        
         documentService.deleteDocument(1L, testUser);
 
         verify(documentRepository, times(1)).findById(1L);
-        verify(fileStorageService, times(1)).deleteFile(anyString());
-        verify(documentRepository, times(1)).delete(testDocument);
+        verify(fileStorageService, times(1)).deleteFile("uploads/user_1/test.pdf");
+        verify(documentRepository, times(1)).delete(docToDelete);
     }
 
     @Test

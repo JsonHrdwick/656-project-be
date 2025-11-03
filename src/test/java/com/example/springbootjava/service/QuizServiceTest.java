@@ -255,7 +255,12 @@ class QuizServiceTest {
 
         List<QuizAnswer> mockAnswers = Arrays.asList(answer1, answer2);
 
-        when(quizRepository.save(any(Quiz.class))).thenReturn(testQuiz);
+        // First save returns the quiz with ID, second save returns the same quiz
+        when(quizRepository.save(any(Quiz.class))).thenAnswer(invocation -> {
+            Quiz quiz = invocation.getArgument(0);
+            quiz.setId(1L); // Set ID for the saved quiz
+            return quiz;
+        });
         when(aiService.generateQuizQuestions(anyString(), anyString(), anyInt())).thenReturn(mockQuestions);
         when(quizQuestionRepository.save(any(QuizQuestion.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(aiService.generateQuizAnswers(anyString())).thenReturn(mockAnswers);
@@ -264,7 +269,8 @@ class QuizServiceTest {
         Quiz result = quizService.generateQuizFromText(text, title, testUser, numberOfQuestions);
 
         assertNotNull(result);
-        assertTrue(result.getTitle().contains(title));
+        assertNotNull(result.getTitle());
+        assertTrue(result.getTitle().contains(title), "Quiz title should contain: " + title + ", but was: " + result.getTitle());
         assertEquals(testUser, result.getUser());
         verify(quizRepository, atLeastOnce()).save(any(Quiz.class));
         verify(aiService, times(1)).generateQuizQuestions(text, title, numberOfQuestions);
