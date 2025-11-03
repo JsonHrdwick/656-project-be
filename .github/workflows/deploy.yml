@@ -103,9 +103,14 @@ jobs:
             fi
             
             # Stop previous app if running (using systemd if service exists)
-            if systemctl is-active --quiet springboot-app.service 2>/dev/null; then
-              sudo systemctl stop springboot-app.service
-            elif pgrep -f "app.jar" > /dev/null; then
+            # First disable the service to prevent it from restarting
+            if systemctl is-enabled springboot-app.service 2>/dev/null; then
+              echo "Disabling systemd service to prevent auto-restart loops..."
+              sudo systemctl stop springboot-app.service 2>/dev/null || true
+              sudo systemctl disable springboot-app.service 2>/dev/null || true
+            fi
+            if pgrep -f "app.jar" > /dev/null; then
+              echo "Stopping existing app.jar process..."
               pkill -f "app.jar"
             fi
             
@@ -118,50 +123,105 @@ jobs:
               # Update user and paths in service file based on actual user
               CURRENT_USER=$(whoami)
               CURRENT_HOME=$(eval echo ~$CURRENT_USER)
+              APP_DIR="$CURRENT_HOME/app"
+              
+              # Find Java executable
+              JAVA_PATH=$(which java || echo "/usr/bin/java")
+              if [ ! -f "$JAVA_PATH" ]; then
+                JAVA_PATH="/usr/lib/jvm/java-17-amazon-corretto/bin/java"
+                [ ! -f "$JAVA_PATH" ] && JAVA_PATH="/usr/lib/jvm/java-17-openjdk/bin/java"
+                [ ! -f "$JAVA_PATH" ] && JAVA_PATH="java"
+              fi
+              
+              # Create service file with correct paths
               sed "s|/home/ec2-user|$CURRENT_HOME|g" ~/springboot-app.service > /tmp/springboot-app.service
-              # Also update any other potential user paths
               sed -i "s|/home/ubuntu|$CURRENT_HOME|g" /tmp/springboot-app.service
+              sed -i "s|/usr/bin/java|$JAVA_PATH|g" /tmp/springboot-app.service
+              sed -i "s|WorkingDirectory=.*|WorkingDirectory=$APP_DIR|" /tmp/springboot-app.service
+              sed -i "s|EnvironmentFile=.*|EnvironmentFile=$APP_DIR/.env|" /tmp/springboot-app.service
+              sed -i "s|-jar .*app.jar|-jar $APP_DIR/app.jar|" /tmp/springboot-app.service
+              
               # Ensure no postgresql dependencies remain
               sed -i '/Requires=postgresql/d' /tmp/springboot-app.service
               sed -i '/After=.*postgresql/d' /tmp/springboot-app.service
-              # Copy and enable service
-              sudo cp /tmp/springboot-app.service /etc/systemd/system/springboot-app.service
-              sudo chmod 644 /etc/systemd/system/springboot-app.service
-              sudo systemctl daemon-reload
-              sudo systemctl enable springboot-app.service
-              echo "Systemd service installed/updated for user: $CURRENT_USER"
-              echo "Service file location: /etc/systemd/system/springboot-app.service"
+              
+              # Verify paths exist before installing service
+              if [ ! -f "$APP_DIR/.env" ]; then
+                echo "WARNING: .env file not found at $APP_DIR/.env, creating it..."
+                touch "$APP_DIR/.env"
+              fi
+              if [ ! -f "$APP_DIR/app.jar" ]; then
+                echo "ERROR: app.jar not found at $APP_DIR/app.jar"
+                echo "Cannot install systemd service without app.jar"
+              else
+                # Copy and enable service
+                sudo cp /tmp/springboot-app.service /etc/systemd/system/springboot-app.service
+                sudo chmod 644 /etc/systemd/system/springboot-app.service
+                sudo systemctl daemon-reload
+                sudo systemctl enable springboot-app.service
+                echo "Systemd service installed/updated for user: $CURRENT_USER"
+                echo "  Java path: $JAVA_PATH"
+                echo "  App directory: $APP_DIR"
+                echo "  Environment file: $APP_DIR/.env"
+                echo "  JAR file: $APP_DIR/app.jar"
+              fi
             fi
             
             # Start app using systemd if service exists, otherwise use nohup
             if [ -f /etc/systemd/system/springboot-app.service ]; then
-              # Verify .env file is readable by systemd (must not have spaces around =)
-              # Clean up any potential formatting issues
-              sed -i 's/ *= */=/' ~/app/.env
-              sed -i '/^$/d' ~/app/.env
-              
-              # Test if systemd can read the environment file
-              echo "Testing environment file format..."
-              if systemctl show-environment 2>/dev/null > /dev/null; then
-                echo "Systemd environment check passed"
-              fi
-              
-              sudo systemctl daemon-reload
-              sudo systemctl start springboot-app.service
-              if [ $? -eq 0 ]; then
-                echo "Started using systemd service"
-                sleep 3
-                sudo systemctl status springboot-app.service --no-pager -l || true
-              else
-                echo "Failed to start systemd service, checking logs..."
-                sudo journalctl -u springboot-app -n 20 --no-pager || true
+              # Verify critical paths exist
+              APP_DIR=$(eval echo ~$(whoami))/app
+              if [ ! -f "$APP_DIR/.env" ]; then
+                echo "ERROR: .env file missing at $APP_DIR/.env"
+                echo "Cannot start systemd service without .env file"
                 echo "Falling back to nohup..."
-                # Load environment variables and start app in background
+                set -a
+                [ -f ~/app/.env ] && source ~/app/.env || true
+                set +a
+                nohup java -Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -jar ~/app/app.jar > ~/app/app.log 2>&1 &
+                echo "Started using nohup (systemd service skipped due to missing .env)"
+              elif [ ! -f "$APP_DIR/app.jar" ]; then
+                echo "ERROR: app.jar missing at $APP_DIR/app.jar"
+                echo "Cannot start systemd service without app.jar"
+                echo "Falling back to nohup..."
                 set -a
                 source ~/app/.env
                 set +a
                 nohup java -Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -jar ~/app/app.jar > ~/app/app.log 2>&1 &
-                echo "Started using nohup"
+                echo "Started using nohup (systemd service skipped due to missing app.jar)"
+              else
+                # Verify .env file is readable by systemd (must not have spaces around =)
+                # Clean up any potential formatting issues
+                sed -i 's/ *= */=/' ~/app/.env
+                sed -i '/^$/d' ~/app/.env
+                
+                # Verify .env file has required variables
+                if ! grep -q '^PGHOST=' ~/app/.env; then
+                  echo "WARNING: PGHOST not set in .env file"
+                fi
+                if ! grep -q '^PGDATABASE=' ~/app/.env; then
+                  echo "WARNING: PGDATABASE not set in .env file"
+                fi
+                
+                echo "Starting systemd service..."
+                sudo systemctl daemon-reload
+                sudo systemctl stop springboot-app.service 2>/dev/null || true
+                sleep 1
+                sudo systemctl start springboot-app.service
+                if [ $? -eq 0 ]; then
+                  echo "Started using systemd service"
+                  sleep 3
+                  sudo systemctl status springboot-app.service --no-pager -l || true
+                else
+                  echo "Failed to start systemd service, checking logs..."
+                  sudo journalctl -u springboot-app -n 30 --no-pager || true
+                  echo "Falling back to nohup..."
+                  set -a
+                  source ~/app/.env
+                  set +a
+                  nohup java -Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -jar ~/app/app.jar > ~/app/app.log 2>&1 &
+                  echo "Started using nohup"
+                fi
               fi
             else
               # Load environment variables and start app in background
