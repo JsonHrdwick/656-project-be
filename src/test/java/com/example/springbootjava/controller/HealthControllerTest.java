@@ -10,14 +10,15 @@ import org.springframework.test.web.servlet.MockMvc;
 import javax.sql.DataSource;
 import java.sql.Connection;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(controllers = HealthController.class, excludeAutoConfiguration = {
-    org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration.class
-})
+@WebMvcTest(controllers = HealthController.class, 
+            excludeAutoConfiguration = {
+                org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration.class,
+                org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration.class
+            })
 @ActiveProfiles("test")
 class HealthControllerTest {
 
