@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 
@@ -76,7 +77,17 @@ public class FlashcardService {
     }
     
     public List<Flashcard> generateFlashcardsFromDocument(Document document, User user) {
-        // Extract content from the document file since content is not stored in database
+        // Validate document is processed
+        if (document.getProcessingStatus() != Document.ProcessingStatus.COMPLETED) {
+            throw new IllegalStateException("Document must be processed before generating flashcards. Current status: " + document.getProcessingStatus());
+        }
+        
+        // Validate file path - must not be mock
+        if (document.getFilePath() == null || document.getFilePath().startsWith("mock://")) {
+            throw new IllegalStateException("Invalid file path: " + document.getFilePath() + ". Document must have a valid stored file.");
+        }
+        
+        // Extract content from the document file
         String content;
         try {
             System.out.println("=== FLASHCARD GENERATION START ===");
@@ -85,26 +96,18 @@ public class FlashcardService {
             System.out.println("Document file path: " + document.getFilePath());
             System.out.println("Document file type: " + document.getFileType());
             
-            if (document.getFilePath() != null && !document.getFilePath().startsWith("mock://")) {
-                // Extract real content from file
-                System.out.println("Attempting to extract real content from file...");
-                content = contentExtractor.extractContent(document.getFilePath());
-                System.out.println("Content extraction successful, length: " + (content != null ? content.length() : 0));
-            } else {
-                System.out.println("Mock file detected or no file path, using simulated content");
-                // Generate simulated content for mock files or when file path is not available
-                content = generateSimulatedContent(document.getFileType(), document.getTitle());
+            System.out.println("Extracting real content from file...");
+            content = contentExtractor.extractContent(document.getFilePath());
+            
+            if (content == null || content.trim().isEmpty()) {
+                throw new IOException("Content extraction returned empty content");
             }
+            
+            System.out.println("Content extraction successful, length: " + content.length());
         } catch (Exception e) {
             System.err.println("Error extracting content from document: " + e.getMessage());
             e.printStackTrace();
-            // Only fallback to simulated content if we absolutely can't extract anything
-            System.out.println("Falling back to simulated content due to extraction error");
-            content = generateSimulatedContent(document.getFileType(), document.getTitle());
-        }
-        
-        if (content == null || content.isEmpty()) {
-            throw new RuntimeException("Could not extract content from document");
+            throw new RuntimeException("Failed to extract content from document: " + e.getMessage(), e);
         }
         
         System.out.println("Generating flashcards using AI service...");
@@ -125,56 +128,6 @@ public class FlashcardService {
         System.out.println("=== FLASHCARD GENERATION END ===");
         
         return savedFlashcards;
-    }
-    
-    private String generateSimulatedContent(String fileType, String title) {
-        // Generate realistic sample content based on file type for POC demonstration
-        StringBuilder content = new StringBuilder();
-        
-        content.append("Document Title: ").append(title).append("\n\n");
-        content.append("File Type: ").append(fileType).append("\n\n");
-        
-        switch (fileType.toLowerCase()) {
-            case "pdf":
-                content.append("This is a simulated PDF document content for demonstration purposes.\n\n");
-                content.append("Chapter 1: Introduction\n");
-                content.append("This document contains important information about the topic. ");
-                content.append("The content would normally be extracted from the actual PDF file using Apache Tika or similar libraries.\n\n");
-                content.append("Chapter 2: Main Concepts\n");
-                content.append("Key concepts include data structures, algorithms, and system design. ");
-                content.append("These topics are essential for understanding modern software development.\n\n");
-                content.append("Chapter 3: Implementation\n");
-                content.append("When implementing solutions, consider performance, scalability, and maintainability. ");
-                content.append("Always follow best practices and coding standards.\n\n");
-                content.append("Chapter 4: Testing\n");
-                content.append("Comprehensive testing ensures code quality and reliability. ");
-                content.append("Include unit tests, integration tests, and end-to-end tests.\n\n");
-                content.append("Chapter 5: Conclusion\n");
-                content.append("This document provides a foundation for understanding the subject matter. ");
-                content.append("Continue learning and practicing to master these concepts.\n");
-                break;
-            case "docx":
-            case "doc":
-                content.append("This is a simulated Word document content for demonstration purposes.\n\n");
-                content.append("Section 1: Overview\n");
-                content.append("This document outlines the key principles and methodologies.\n\n");
-                content.append("Section 2: Detailed Analysis\n");
-                content.append("A comprehensive analysis of the subject matter reveals important insights.\n\n");
-                content.append("Section 3: Recommendations\n");
-                content.append("Based on the analysis, several recommendations can be made.\n");
-                break;
-            case "txt":
-                content.append("This is a simulated text document content for demonstration purposes.\n\n");
-                content.append("This document contains plain text content that would be used for generating flashcards and quizzes.\n");
-                content.append("The content includes various topics and concepts that are important for learning.\n");
-                break;
-            default:
-                content.append("This is a simulated document content for demonstration purposes.\n\n");
-                content.append("The document contains various topics and concepts that are important for learning.\n");
-                break;
-        }
-        
-        return content.toString();
     }
     
     public List<Flashcard> generateFlashcardsFromText(String text, String category, User user) {

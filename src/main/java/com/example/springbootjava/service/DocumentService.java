@@ -35,9 +35,6 @@ public class DocumentService {
     @Autowired
     private DocumentContentExtractor contentExtractor;
     
-    @Value("${document.processing.simulate:false}")
-    private boolean simulateProcessing;
-    
     @Value("${document.storage.local.enabled:true}")
     private boolean localStorageEnabled;
     
@@ -53,32 +50,28 @@ public class DocumentService {
         System.out.println("Content type: " + contentType);
         System.out.println("File size: " + fileSize + " bytes");
         
-        // Store file locally
+        // Store file locally - REQUIRED, no fallbacks
         System.out.println("Storing file locally...");
         System.out.println("Local storage enabled: " + localStorageEnabled);
+        
+        if (!localStorageEnabled) {
+            throw new IllegalStateException("Local storage is disabled. Cannot upload documents without file storage enabled.");
+        }
+        
         String storedFilePath;
-        if (localStorageEnabled) {
-            try {
-                storedFilePath = fileStorageService.storeFile(file, user.getId());
-                System.out.println("File stored successfully at: " + storedFilePath);
-                
-                // Verify file was actually stored
-                if (fileStorageService.fileExists(storedFilePath)) {
-                    System.out.println("File verification: File exists in storage");
-                } else {
-                    System.out.println("File verification: File NOT found in storage!");
-                }
-            } catch (Exception e) {
-                System.err.println("Error storing file: " + e.getMessage());
-                e.printStackTrace();
-                // Fallback to mock path if storage fails
-                storedFilePath = "mock://" + originalFilename;
-                System.out.println("Falling back to mock path: " + storedFilePath);
+        try {
+            storedFilePath = fileStorageService.storeFile(file, user.getId());
+            System.out.println("File stored successfully at: " + storedFilePath);
+            
+            // Verify file was actually stored
+            if (!fileStorageService.fileExists(storedFilePath)) {
+                throw new IOException("File storage verification failed. File not found at: " + storedFilePath);
             }
-        } else {
-            // Fallback for when local storage is disabled
-            storedFilePath = "mock://" + originalFilename;
-            System.out.println("Local storage disabled, using mock path: " + storedFilePath);
+            System.out.println("File verification: File exists in storage");
+        } catch (Exception e) {
+            System.err.println("CRITICAL ERROR: Failed to store file: " + e.getMessage());
+            e.printStackTrace();
+            throw new IOException("Failed to store uploaded file: " + e.getMessage(), e);
         }
         
         // Create document entity
@@ -148,8 +141,8 @@ public class DocumentService {
                     } else {
                         System.out.println("Warning: File deletion failed, but continuing with database cleanup");
                     }
-                } else {
-                    System.out.println("Skipping file deletion (local storage disabled or mock file)");
+                } else if (document.getFilePath() != null && document.getFilePath().startsWith("mock://")) {
+                    System.out.println("Skipping file deletion (mock file path detected)");
                 }
                 
                 // Delete from database
@@ -166,52 +159,52 @@ public class DocumentService {
                 System.out.println("=== DOCUMENT PROCESSING START ===");
                 System.out.println("Processing document ID: " + document.getId());
                 System.out.println("Document title: " + document.getTitle());
-                System.out.println("Simulation mode: " + simulateProcessing);
                 System.out.println("Local storage enabled: " + localStorageEnabled);
                 System.out.println("File path: " + document.getFilePath());
                 
-                // Extract content from file ONLY for AI processing (not for storage)
-                System.out.println("Extracting content from file for AI processing...");
-                System.out.println("DEBUG: simulateProcessing = " + simulateProcessing);
-                System.out.println("DEBUG: localStorageEnabled = " + localStorageEnabled);
-                System.out.println("DEBUG: document.getFilePath() = " + document.getFilePath());
-                System.out.println("DEBUG: filePath starts with mock = " + (document.getFilePath() != null && document.getFilePath().startsWith("mock://")));
+                // Set status to PROCESSING
+                document.setProcessingStatus(Document.ProcessingStatus.PROCESSING);
+                documentRepository.save(document);
+                System.out.println("Document status set to PROCESSING");
                 
-                String contentForAI;
-                if (simulateProcessing) {
-                    // Simulate content extraction (generate sample content based on file type)
-                    System.out.println("SIMULATION MODE: Generating simulated content for AI");
-                    contentForAI = generateSimulatedContent(document.getFileType(), document.getTitle());
-                } else if (localStorageEnabled && document.getFilePath() != null && !document.getFilePath().startsWith("mock://")) {
-                    // Extract real content from stored file for AI processing
-                    System.out.println("REAL PROCESSING MODE: Extracting real content from file: " + document.getFilePath());
-                    try {
-                        contentForAI = contentExtractor.extractContent(document.getFilePath());
-                        System.out.println("Real content extracted successfully for AI, length: " + contentForAI.length());
-                    } catch (IOException e) {
-                        System.out.println("ERROR: Error extracting content, falling back to simulation: " + e.getMessage());
-                        e.printStackTrace();
-                        contentForAI = generateSimulatedContent(document.getFileType(), document.getTitle());
-                    }
-                } else {
-                    // Fallback to simulation
-                    System.out.println("FALLBACK MODE: Using simulated content (local storage disabled or mock file)");
-                    System.out.println("FALLBACK REASON: localStorageEnabled=" + localStorageEnabled + ", filePath=" + document.getFilePath());
-                    contentForAI = generateSimulatedContent(document.getFileType(), document.getTitle());
+                // Validate file path - must not be mock
+                if (document.getFilePath() == null || document.getFilePath().startsWith("mock://")) {
+                    throw new IOException("Invalid file path: " + document.getFilePath() + ". File must be stored locally.");
                 }
                 
-                // DO NOT store extracted content in database - we'll serve the actual file
-                System.out.println("Content extracted for AI processing, length: " + contentForAI.length());
-                System.out.println("Note: Not storing extracted content in database - will serve actual file instead");
+                // Validate local storage is enabled
+                if (!localStorageEnabled) {
+                    throw new IllegalStateException("Local storage is disabled. Cannot process document without file storage.");
+                }
+                
+                // Validate file exists
+                if (!fileStorageService.fileExists(document.getFilePath())) {
+                    throw new IOException("File does not exist at path: " + document.getFilePath());
+                }
+                
+                // Extract content from file for AI processing
+                System.out.println("Extracting content from file for AI processing...");
+                String contentForAI = contentExtractor.extractContent(document.getFilePath());
+                
+                if (contentForAI == null || contentForAI.trim().isEmpty()) {
+                    throw new IOException("Failed to extract content from file. Content is empty.");
+                }
+                
+                System.out.println("Content extracted successfully, length: " + contentForAI.length());
                 
                 // Generate AI summary using extracted content
-                System.out.println("Generating AI summary...");
+                System.out.println("Generating AI summary using OpenAI...");
                 String summary = aiService.generateSummary(contentForAI);
-                document.setSummary(summary);
-                System.out.println("AI summary generated: " + summary);
                 
-                // Update processing status
-                System.out.println("Updating processing status...");
+                if (summary == null || summary.trim().isEmpty()) {
+                    throw new IllegalStateException("AI service failed to generate summary.");
+                }
+                
+                document.setSummary(summary);
+                System.out.println("AI summary generated successfully");
+                
+                // Update processing status to COMPLETED
+                System.out.println("Updating processing status to COMPLETED...");
                 document.setProcessingStatus(Document.ProcessingStatus.COMPLETED);
                 documentRepository.save(document);
                 System.out.println("Document processing completed successfully");
@@ -226,75 +219,15 @@ public class DocumentService {
                 try {
                     document.setProcessingStatus(Document.ProcessingStatus.FAILED);
                     documentRepository.save(document);
+                    System.out.println("Document status set to FAILED");
                 } catch (Exception saveError) {
-                    System.out.println("Failed to save error status: " + saveError.getMessage());
+                    System.err.println("CRITICAL: Failed to save error status: " + saveError.getMessage());
+                    saveError.printStackTrace();
                 }
             }
         });
     }
     
-    private String generateSimulatedContent(String fileType, String title) {
-        // Generate realistic sample content based on file type for POC demonstration
-        StringBuilder content = new StringBuilder();
-        
-        content.append("Document Title: ").append(title).append("\n\n");
-        content.append("File Type: ").append(fileType).append("\n\n");
-        
-        switch (fileType.toLowerCase()) {
-            case "pdf":
-                content.append("This is a simulated PDF document content for demonstration purposes.\n\n");
-                content.append("Chapter 1: Introduction\n");
-                content.append("This document contains important information about the topic. ");
-                content.append("The content would normally be extracted from the actual PDF file using Apache Tika or similar libraries.\n\n");
-                content.append("Chapter 2: Main Concepts\n");
-                content.append("Key concepts include data structures, algorithms, and system design principles. ");
-                content.append("These concepts are fundamental to understanding the subject matter.\n\n");
-                content.append("Chapter 3: Implementation\n");
-                content.append("The implementation details cover various approaches and best practices. ");
-                content.append("This section provides practical guidance for developers.\n\n");
-                break;
-                
-            case "docx":
-            case "doc":
-                content.append("This is a simulated Word document content for demonstration purposes.\n\n");
-                content.append("Executive Summary\n");
-                content.append("This document outlines the key findings and recommendations from our analysis. ");
-                content.append("The content demonstrates how AI can process and understand document structure.\n\n");
-                content.append("Key Findings\n");
-                content.append("1. Performance improvements of 40% were achieved\n");
-                content.append("2. User satisfaction increased by 25%\n");
-                content.append("3. System reliability improved significantly\n\n");
-                break;
-                
-            case "txt":
-                content.append("This is a simulated text document content for demonstration purposes.\n\n");
-                content.append("Project Overview\n");
-                content.append("This text file contains important project information and notes. ");
-                content.append("The content is structured to demonstrate AI processing capabilities.\n\n");
-                content.append("Technical Specifications\n");
-                content.append("- Framework: Spring Boot\n");
-                content.append("- Database: PostgreSQL\n");
-                content.append("- Frontend: React/Next.js\n");
-                content.append("- Deployment: Railway\n\n");
-                break;
-                
-            default:
-                content.append("This is simulated content for a ").append(fileType).append(" file.\n\n");
-                content.append("The content demonstrates how the AI service can process different file types ");
-                content.append("and generate summaries, flashcards, and quiz questions based on the document content.\n\n");
-                content.append("Key Topics Covered:\n");
-                content.append("- Document processing and analysis\n");
-                content.append("- AI-powered content generation\n");
-                content.append("- Educational tool development\n");
-                content.append("- User experience optimization\n\n");
-                break;
-        }
-        
-        content.append("Note: This is simulated content for POC demonstration. ");
-        content.append("In a production environment, actual file content would be extracted and processed.");
-        
-        return content.toString();
-    }
     
     private String getFileType(String filename) {
         String extension = filename.substring(filename.lastIndexOf(".") + 1).toLowerCase();

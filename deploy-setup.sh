@@ -14,7 +14,7 @@ echo "Setting up Spring Boot application on EC2..."
 mkdir -p "$APP_DIR"
 mkdir -p "$APP_DIR/uploads"
 
-# Check if .env file exists
+# Check if ..env file exists
 if [ ! -f "$APP_DIR/.env" ]; then
     echo "WARNING: .env file not found at $APP_DIR/.env"
     echo "Please create it with the required environment variables"
