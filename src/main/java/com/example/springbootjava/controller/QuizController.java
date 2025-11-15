@@ -1,6 +1,7 @@
 package com.example.springbootjava.controller;
 
 import com.example.springbootjava.dto.QuizResponseDTO;
+import com.example.springbootjava.dto.QuizUpdateDTO;
 import com.example.springbootjava.entity.Quiz;
 import com.example.springbootjava.entity.User;
 import com.example.springbootjava.service.QuizService;
@@ -143,22 +144,40 @@ public class QuizController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<QuizResponseDTO> updateQuiz(@PathVariable Long id, @RequestBody Quiz quizDetails, Authentication authentication) {
+    public ResponseEntity<QuizResponseDTO> updateQuiz(@PathVariable Long id, @RequestBody QuizUpdateDTO quizUpdateDTO, Authentication authentication) {
         User user = (User) authentication.getPrincipal();
         
         Optional<Quiz> quizOpt = quizService.getQuizById(id);
         if (quizOpt.isPresent()) {
             Quiz quiz = quizOpt.get();
             if (quiz.getUser().getId().equals(user.getId())) {
-                quiz.setTitle(quizDetails.getTitle());
-                quiz.setDescription(quizDetails.getDescription());
-                quiz.setTimeLimitMinutes(quizDetails.getTimeLimitMinutes());
-                quiz.setDifficulty(quizDetails.getDifficulty());
-                quiz.setIsPublished(quizDetails.getIsPublished());
+                // Only update fields that are provided (not null)
+                if (quizUpdateDTO.getTitle() != null) {
+                    quiz.setTitle(quizUpdateDTO.getTitle());
+                }
+                if (quizUpdateDTO.getDescription() != null) {
+                    quiz.setDescription(quizUpdateDTO.getDescription());
+                }
+                if (quizUpdateDTO.getTimeLimitMinutes() != null) {
+                    quiz.setTimeLimitMinutes(quizUpdateDTO.getTimeLimitMinutes());
+                }
+                if (quizUpdateDTO.getDifficulty() != null) {
+                    try {
+                        Quiz.Difficulty difficulty = Quiz.Difficulty.valueOf(quizUpdateDTO.getDifficulty().toUpperCase());
+                        quiz.setDifficulty(difficulty);
+                    } catch (IllegalArgumentException e) {
+                        return ResponseEntity.badRequest().build();
+                    }
+                }
+                if (quizUpdateDTO.getIsPublished() != null) {
+                    quiz.setIsPublished(quizUpdateDTO.getIsPublished());
+                }
                 quiz.setUpdatedAt(java.time.LocalDateTime.now());
                 
                 Quiz updatedQuiz = quizService.updateQuiz(quiz);
-                QuizResponseDTO quizDTO = new QuizResponseDTO(updatedQuiz);
+                Double bestScore = quizService.getBestScoreForUserAndQuiz(user, updatedQuiz);
+                Integer bestScoreInt = bestScore != null ? bestScore.intValue() : null;
+                QuizResponseDTO quizDTO = new QuizResponseDTO(updatedQuiz, bestScoreInt);
                 return ResponseEntity.ok(quizDTO);
             } else {
                 return ResponseEntity.status(403).build();
@@ -177,6 +196,24 @@ public class QuizController {
             Quiz quiz = quizOpt.get();
             if (quiz.getUser().getId().equals(user.getId())) {
                 quizService.deleteQuiz(id);
+                return ResponseEntity.ok().build();
+            } else {
+                return ResponseEntity.status(403).build();
+            }
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @DeleteMapping("/{id}/reset-score")
+    public ResponseEntity<Void> resetQuizScore(@PathVariable Long id, Authentication authentication) {
+        User user = (User) authentication.getPrincipal();
+        
+        Optional<Quiz> quizOpt = quizService.getQuizById(id);
+        if (quizOpt.isPresent()) {
+            Quiz quiz = quizOpt.get();
+            if (quiz.getUser().getId().equals(user.getId())) {
+                quizService.resetQuizAttemptsForUser(id, user);
                 return ResponseEntity.ok().build();
             } else {
                 return ResponseEntity.status(403).build();

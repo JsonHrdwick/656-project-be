@@ -258,4 +258,13 @@ public class QuizService {
         Optional<QuizAttempt> bestAttempt = quizAttemptRepository.findBestAttemptByUserAndQuiz(user, quiz);
         return bestAttempt.map(QuizAttempt::getScore).orElse(null);
     }
+
+    public void resetQuizAttemptsForUser(Long quizId, User user) {
+        Optional<Quiz> quizOpt = quizRepository.findById(quizId);
+        if (quizOpt.isPresent()) {
+            Quiz quiz = quizOpt.get();
+            List<QuizAttempt> attempts = quizAttemptRepository.findByUserAndQuiz(user, quiz);
+            quizAttemptRepository.deleteAll(attempts);
+        }
+    }
 }
