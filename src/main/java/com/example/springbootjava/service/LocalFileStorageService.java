@@ -47,12 +47,28 @@ public class LocalFileStorageService {
         Path filePath = userDir.resolve(uniqueFilename);
         Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
         
-        // Return relative path for database storage
-        return Paths.get("uploads", "user_" + userId, uniqueFilename).toString();
+        // Return relative path for database storage (normalize to forward slashes for cross-platform compatibility)
+        String relativePath = Paths.get("uploads", "user_" + userId, uniqueFilename).toString();
+        // Normalize to forward slashes for consistent storage
+        return relativePath.replace('\\', '/');
+    }
+    
+    private String normalizePath(String filePath) {
+        if (filePath == null) {
+            return null;
+        }
+        // Normalize path separators to forward slashes for cross-platform compatibility
+        // Paths.get() will handle the conversion to the correct separator for the OS
+        return filePath.replace('\\', '/');
     }
     
     public byte[] retrieveFile(String filePath) throws IOException {
-        Path fullPath = Paths.get(basePath, filePath);
+        String normalizedPath = normalizePath(filePath);
+        // Remove "uploads/" prefix if present
+        if (normalizedPath.startsWith("uploads/")) {
+            normalizedPath = normalizedPath.substring(8);
+        }
+        Path fullPath = Paths.get(basePath, normalizedPath);
         if (!Files.exists(fullPath)) {
             throw new IOException("File not found: " + filePath);
         }
@@ -61,7 +77,12 @@ public class LocalFileStorageService {
     
     public boolean deleteFile(String filePath) {
         try {
-            Path fullPath = Paths.get(basePath, filePath);
+            String normalizedPath = normalizePath(filePath);
+            // Remove "uploads/" prefix if present
+            if (normalizedPath.startsWith("uploads/")) {
+                normalizedPath = normalizedPath.substring(8);
+            }
+            Path fullPath = Paths.get(basePath, normalizedPath);
             if (Files.exists(fullPath)) {
                 Files.delete(fullPath);
                 return true;
@@ -74,12 +95,25 @@ public class LocalFileStorageService {
     }
     
     public boolean fileExists(String filePath) {
-        Path fullPath = Paths.get(basePath, filePath);
+        if (filePath == null) {
+            return false;
+        }
+        String normalizedPath = normalizePath(filePath);
+        // Remove "uploads/" prefix if present
+        if (normalizedPath.startsWith("uploads/")) {
+            normalizedPath = normalizedPath.substring(8);
+        }
+        Path fullPath = Paths.get(basePath, normalizedPath);
         return Files.exists(fullPath);
     }
     
     public long getFileSize(String filePath) throws IOException {
-        Path fullPath = Paths.get(basePath, filePath);
+        String normalizedPath = normalizePath(filePath);
+        // Remove "uploads/" prefix if present
+        if (normalizedPath.startsWith("uploads/")) {
+            normalizedPath = normalizedPath.substring(8);
+        }
+        Path fullPath = Paths.get(basePath, normalizedPath);
         if (!Files.exists(fullPath)) {
             throw new IOException("File not found: " + filePath);
         }

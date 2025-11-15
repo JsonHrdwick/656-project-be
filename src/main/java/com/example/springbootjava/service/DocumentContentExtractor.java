@@ -33,25 +33,39 @@ public class DocumentContentExtractor {
                 throw new IOException("Invalid file path: " + filePath + ". Mock files are not supported. File must be stored locally.");
             }
             
+            // Normalize path separators (handle both Windows \ and Unix /)
+            String normalizedPath = filePath.replace('\\', '/');
+            System.out.println("Normalized path: " + normalizedPath);
+            
+            // Remove "uploads/" prefix if present (normalized to forward slashes)
+            String pathForCheck;
+            if (normalizedPath.startsWith("uploads/")) {
+                pathForCheck = normalizedPath.substring(8); // Remove "uploads/" prefix (8 chars)
+            } else {
+                pathForCheck = normalizedPath;
+            }
+            System.out.println("Path for check: " + pathForCheck);
+            
             // Check if file exists using the storage service
             System.out.println("Checking if file exists...");
-            String pathForCheck = filePath.startsWith("uploads/") ? filePath.substring(7) : filePath;
             if (!fileStorageService.fileExists(pathForCheck)) {
-                throw new IOException("File does not exist at path: " + filePath);
+                // Try with the full path as stored
+                if (!fileStorageService.fileExists(normalizedPath)) {
+                    throw new IOException("File does not exist at path: " + filePath + " (checked: " + pathForCheck + " and " + normalizedPath + ")");
+                } else {
+                    pathForCheck = normalizedPath;
+                }
             }
             System.out.println("File exists, proceeding with extraction");
             
-            // Build full path using base path
-            Path fullPath;
-            if (filePath.startsWith("uploads/")) {
-                // File path already includes uploads prefix, use it directly
-                fullPath = Paths.get(basePath, filePath.substring(7)); // Remove "uploads/" prefix
-            } else {
-                // File path doesn't include uploads prefix, combine with base path
-                fullPath = Paths.get(basePath, filePath);
-            }
+            // Build full path using base path - Paths.get handles path separators correctly
+            Path fullPath = Paths.get(basePath, pathForCheck);
             System.out.println("Full path for extraction: " + fullPath.toString());
             System.out.println("File exists at full path: " + Files.exists(fullPath));
+            
+            if (!Files.exists(fullPath)) {
+                throw new IOException("File does not exist at full path: " + fullPath.toString());
+            }
             
             // Use Apache Tika to extract content from all supported file types
             System.out.println("Starting Tika content extraction...");
