@@ -129,26 +129,39 @@ public class QuizService {
         // Save the quiz first to get an ID
         quiz = quizRepository.save(quiz);
         
-        // Generate quiz questions using AI service
-        List<QuizQuestion> questions = aiService.generateQuizQuestions(
+        // Generate quiz questions with answers using AI service (combined call)
+        List<AIService.QuestionWithAnswers> questionsWithAnswers = aiService.generateQuizQuestionsWithAnswers(
                 content, 
                 document.getTitle(),
                 numberOfQuestions
         );
         
+        if (questionsWithAnswers.isEmpty()) {
+            throw new IllegalStateException("Failed to generate any quiz questions. Please try again.");
+        }
+        
         // Set quiz reference for each question and save them
         Set<QuizQuestion> savedQuestions = new HashSet<>();
-        for (QuizQuestion question : questions) {
+        for (AIService.QuestionWithAnswers qwa : questionsWithAnswers) {
+            // Create question
+            QuizQuestion question = new QuizQuestion();
+            question.setQuestionText(qwa.questionText);
+            question.setQuestionType(QuizQuestion.QuestionType.MULTIPLE_CHOICE);
+            question.setPoints(1);
             question.setQuiz(quiz);
             question = quizQuestionRepository.save(question);
             
-            // Generate answers for each question
-            List<QuizAnswer> answers = aiService.generateQuizAnswers(question.getQuestionText());
-            
-            // Set question reference for each answer and save them
+            // Create answers from the combined data
             Set<QuizAnswer> savedAnswers = new HashSet<>();
-            for (int i = 0; i < answers.size(); i++) {
-                QuizAnswer answer = answers.get(i);
+            
+            // Determine which option is correct based on correctAnswer letter
+            String[] options = {qwa.optionA, qwa.optionB, qwa.optionC, qwa.optionD};
+            String[] optionLetters = {"A", "B", "C", "D"};
+            
+            for (int i = 0; i < options.length; i++) {
+                QuizAnswer answer = new QuizAnswer();
+                answer.setAnswerText(options[i]);
+                answer.setIsCorrect(optionLetters[i].equals(qwa.correctAnswer));
                 answer.setQuestion(question);
                 answer.setOrder(i);
                 answer = quizAnswerRepository.save(answer);
@@ -177,22 +190,39 @@ public class QuizService {
         // Save the quiz first to get an ID
         quiz = quizRepository.save(quiz);
         
-        // Generate quiz questions using AI service
-        List<QuizQuestion> questions = aiService.generateQuizQuestions(text, title, numberOfQuestions);
+        // Generate quiz questions with answers using AI service (combined call)
+        List<AIService.QuestionWithAnswers> questionsWithAnswers = aiService.generateQuizQuestionsWithAnswers(
+                text, 
+                title,
+                numberOfQuestions
+        );
+        
+        if (questionsWithAnswers.isEmpty()) {
+            throw new IllegalStateException("Failed to generate any quiz questions. Please try again.");
+        }
         
         // Set quiz reference for each question and save them
         Set<QuizQuestion> savedQuestions = new HashSet<>();
-        for (QuizQuestion question : questions) {
+        for (AIService.QuestionWithAnswers qwa : questionsWithAnswers) {
+            // Create question
+            QuizQuestion question = new QuizQuestion();
+            question.setQuestionText(qwa.questionText);
+            question.setQuestionType(QuizQuestion.QuestionType.MULTIPLE_CHOICE);
+            question.setPoints(1);
             question.setQuiz(quiz);
             question = quizQuestionRepository.save(question);
             
-            // Generate answers for each question
-            List<QuizAnswer> answers = aiService.generateQuizAnswers(question.getQuestionText());
-            
-            // Set question reference for each answer and save them
+            // Create answers from the combined data
             Set<QuizAnswer> savedAnswers = new HashSet<>();
-            for (int i = 0; i < answers.size(); i++) {
-                QuizAnswer answer = answers.get(i);
+            
+            // Determine which option is correct based on correctAnswer letter
+            String[] options = {qwa.optionA, qwa.optionB, qwa.optionC, qwa.optionD};
+            String[] optionLetters = {"A", "B", "C", "D"};
+            
+            for (int i = 0; i < options.length; i++) {
+                QuizAnswer answer = new QuizAnswer();
+                answer.setAnswerText(options[i]);
+                answer.setIsCorrect(optionLetters[i].equals(qwa.correctAnswer));
                 answer.setQuestion(question);
                 answer.setOrder(i);
                 answer = quizAnswerRepository.save(answer);

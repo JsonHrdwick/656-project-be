@@ -212,14 +212,19 @@ public class AIService {
             messages.add(new ChatMessage(ChatMessageRole.SYSTEM.value(), 
                 "You are an AI assistant that creates quiz questions. " +
                 "Create " + maxQuestions + " multiple choice questions from the following content. " +
-                "Format each question as: QUESTION|OPTION_A|OPTION_B|OPTION_C|OPTION_D|CORRECT_ANSWER|EXPLANATION " +
-                "Where CORRECT_ANSWER is A, B, C, or D. Each line should be one question:"));
+                "IMPORTANT: Format each question EXACTLY as follows (one question per line):\n" +
+                "QUESTION_TEXT|OPTION_A|OPTION_B|OPTION_C|OPTION_D|CORRECT_LETTER\n" +
+                "Where:\n" +
+                "- QUESTION_TEXT is just the question text (no options, no letters)\n" +
+                "- OPTION_A, OPTION_B, OPTION_C, OPTION_D are the four answer options (just the text, no letters)\n" +
+                "- CORRECT_LETTER is exactly A, B, C, or D (the letter of the correct answer)\n" +
+                "Do NOT include the question text with options embedded. Keep them separate."));
             messages.add(new ChatMessage(ChatMessageRole.USER.value(), limitedContent));
             
             ChatCompletionRequest request = ChatCompletionRequest.builder()
                 .model(openAIConfig.getModel())
                 .messages(messages)
-                .maxTokens(600)
+                .maxTokens(1000)
                 .temperature(0.7)
                 .build();
             
@@ -233,29 +238,25 @@ public class AIService {
             List<QuizQuestion> questions = new ArrayList<>();
             String[] lines = response.split("\n");
             for (String line : lines) {
-                if (line.contains("|")) {
-                    String[] parts = line.split("\\|");
-                    if (parts.length >= 6) {
-                        QuizQuestion question = new QuizQuestion();
-                        question.setQuestionText(parts[0].trim());
-                        
-                        // Create options (simplified - in a real app you'd have separate option fields)
-                        String options = "A) " + parts[1].trim() + "\n" +
-                                       "B) " + parts[2].trim() + "\n" +
-                                       "C) " + parts[3].trim() + "\n" +
-                                       "D) " + parts[4].trim();
-                        question.setQuestionText(question.getQuestionText() + "\n\n" + options);
-                        // Align with updated QuizQuestion model (answers stored in QuizAnswer)
-                        question.setQuestionType(QuizQuestion.QuestionType.MULTIPLE_CHOICE);
-                        question.setPoints(1);
-                        questions.add(question);
-                    }
+                line = line.trim();
+                if (line.isEmpty() || !line.contains("|")) continue;
+                
+                String[] parts = line.split("\\|");
+                if (parts.length >= 6) {
+                    QuizQuestion question = new QuizQuestion();
+                    // Question text should NOT include options
+                    question.setQuestionText(parts[0].trim());
+                    question.setQuestionType(QuizQuestion.QuestionType.MULTIPLE_CHOICE);
+                    question.setPoints(1);
+                    questions.add(question);
                 }
             }
             
             return questions;
             
         } catch (Exception e) {
+            System.err.println("Error generating quiz questions: " + e.getMessage());
+            e.printStackTrace();
             // Fallback to simple question generation
             List<QuizQuestion> questions = new ArrayList<>();
             String limitedContent = content.length() > 2000 ? content.substring(0, 2000) : content;
@@ -274,21 +275,44 @@ public class AIService {
         }
     }
     
-    public List<QuizAnswer> generateQuizAnswers(String questionText) {
+    /**
+     * Generates complete quiz questions with answers in one call.
+     * Returns a list where each element contains both question and answer data.
+     */
+    public static class QuestionWithAnswers {
+        public String questionText;
+        public String optionA;
+        public String optionB;
+        public String optionC;
+        public String optionD;
+        public String correctAnswer; // A, B, C, or D
+    }
+    
+    public List<QuestionWithAnswers> generateQuizQuestionsWithAnswers(String content, String title, int numberOfQuestions) {
         try {
+            // Limit content and questions to avoid token limits
+            String limitedContent = content.length() > 3000 ? content.substring(0, 3000) : content;
+            int maxQuestions = Math.min(numberOfQuestions, 5); // Cap at 5 questions
+            
             List<ChatMessage> messages = new ArrayList<>();
             messages.add(new ChatMessage(ChatMessageRole.SYSTEM.value(), 
-                "You are an AI assistant that creates multiple choice answers for quiz questions. " +
-                "Create 4 answer options for the given question. " +
-                "Format as: CORRECT_ANSWER|WRONG_ANSWER_1|WRONG_ANSWER_2|WRONG_ANSWER_3 " +
-                "Where the first answer is correct and the others are plausible but incorrect. " +
-                "Each answer should be concise (1-2 sentences max):"));
-            messages.add(new ChatMessage(ChatMessageRole.USER.value(), questionText));
+                "You are an AI assistant that creates quiz questions with multiple choice answers. " +
+                "Create " + maxQuestions + " multiple choice questions from the following content. " +
+                "IMPORTANT: Format each question EXACTLY as follows (one question per line, no blank lines between questions):\n" +
+                "QUESTION_TEXT|OPTION_A|OPTION_B|OPTION_C|OPTION_D|CORRECT_LETTER\n" +
+                "Where:\n" +
+                "- QUESTION_TEXT is just the question text (no options, no letters like A) B) C) D))\n" +
+                "- OPTION_A, OPTION_B, OPTION_C, OPTION_D are the four answer options (just the text, no letters)\n" +
+                "- CORRECT_LETTER is exactly A, B, C, or D (the letter of the correct answer)\n" +
+                "Example format:\n" +
+                "What is the capital of France?|Paris|London|Berlin|Madrid|A\n" +
+                "Do NOT include letters (A) B) C) D)) in the question text or options. Keep them separate."));
+            messages.add(new ChatMessage(ChatMessageRole.USER.value(), "Content: " + limitedContent));
             
             ChatCompletionRequest request = ChatCompletionRequest.builder()
                 .model(openAIConfig.getModel())
                 .messages(messages)
-                .maxTokens(300)
+                .maxTokens(1200)
                 .temperature(0.7)
                 .build();
             
@@ -298,61 +322,160 @@ public class AIService {
                 .getMessage()
                 .getContent();
             
-            // Parse the response into quiz answers
-            List<QuizAnswer> answers = new ArrayList<>();
-            if (response.contains("|")) {
-                String[] parts = response.split("\\|");
-                if (parts.length >= 4) {
-                    // Correct answer
-                    QuizAnswer correctAnswer = new QuizAnswer();
-                    correctAnswer.setAnswerText(parts[0].trim());
-                    correctAnswer.setIsCorrect(true);
-                    answers.add(correctAnswer);
-                    
-                    // Wrong answers
-                    for (int i = 1; i < parts.length && i < 4; i++) {
-                        QuizAnswer wrongAnswer = new QuizAnswer();
-                        wrongAnswer.setAnswerText(parts[i].trim());
-                        wrongAnswer.setIsCorrect(false);
-                        answers.add(wrongAnswer);
+            System.out.println("=== QUIZ GENERATION RESPONSE ===");
+            System.out.println(response);
+            System.out.println("=== END RESPONSE ===");
+            
+            // Parse the response into questions with answers
+            List<QuestionWithAnswers> questions = new ArrayList<>();
+            String[] lines = response.split("\n");
+            for (String line : lines) {
+                line = line.trim();
+                if (line.isEmpty()) continue;
+                
+                // Skip lines that are just labels or headers
+                if (line.toLowerCase().startsWith("question") || 
+                    line.toLowerCase().startsWith("answer") ||
+                    line.matches("^[A-D]\\)\\s*")) {
+                    continue;
+                }
+                
+                // Try to parse pipe-separated format
+                if (line.contains("|")) {
+                    String[] parts = line.split("\\|");
+                    if (parts.length >= 6) {
+                        QuestionWithAnswers qwa = new QuestionWithAnswers();
+                        qwa.questionText = parts[0].trim();
+                        qwa.optionA = parts[1].trim();
+                        qwa.optionB = parts[2].trim();
+                        qwa.optionC = parts[3].trim();
+                        qwa.optionD = parts[4].trim();
+                        qwa.correctAnswer = parts[5].trim().toUpperCase();
+                        
+                        // Validate correct answer is A, B, C, or D
+                        if (!qwa.correctAnswer.matches("[ABCD]")) {
+                            System.err.println("Invalid correct answer: " + qwa.correctAnswer + ", defaulting to A");
+                            qwa.correctAnswer = "A";
+                        }
+                        
+                        // Clean up question text - remove any embedded options
+                        qwa.questionText = qwa.questionText.replaceAll("(?i)\\s*[A-D]\\)\\s*", " ").trim();
+                        qwa.questionText = qwa.questionText.replaceAll("QUESTION\\s*:?\\s*", "").trim();
+                        
+                        // Clean up options - remove any leading letters
+                        qwa.optionA = qwa.optionA.replaceAll("^[A-D]\\)\\s*", "").trim();
+                        qwa.optionB = qwa.optionB.replaceAll("^[A-D]\\)\\s*", "").trim();
+                        qwa.optionC = qwa.optionC.replaceAll("^[A-D]\\)\\s*", "").trim();
+                        qwa.optionD = qwa.optionD.replaceAll("^[A-D]\\)\\s*", "").trim();
+                        
+                        questions.add(qwa);
                     }
                 }
             }
             
-            // If parsing failed, create fallback answers
-            if (answers.isEmpty()) {
-                QuizAnswer correctAnswer = new QuizAnswer();
-                correctAnswer.setAnswerText("This is the correct answer based on the content.");
-                correctAnswer.setIsCorrect(true);
-                answers.add(correctAnswer);
+            if (questions.isEmpty()) {
+                System.err.println("No questions parsed from response. Response was: " + response);
+            }
+            
+            return questions;
+            
+        } catch (Exception e) {
+            System.err.println("Error generating quiz questions with answers: " + e.getMessage());
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
+    
+    public List<QuizAnswer> generateQuizAnswers(String questionText) {
+        try {
+            // Clean question text - remove any embedded options that might have been added
+            String cleanQuestionText = questionText;
+            // Remove options that might be embedded in the question
+            cleanQuestionText = cleanQuestionText.replaceAll("(?i)\\s*[A-D]\\)\\s*[^\\n]*", "").trim();
+            cleanQuestionText = cleanQuestionText.replaceAll("QUESTION\\s*:?\\s*", "").trim();
+            
+            List<ChatMessage> messages = new ArrayList<>();
+            messages.add(new ChatMessage(ChatMessageRole.SYSTEM.value(), 
+                "You are an AI assistant that creates multiple choice answers for quiz questions. " +
+                "Create 4 answer options for the given question. " +
+                "IMPORTANT: Format EXACTLY as: CORRECT_ANSWER|WRONG_ANSWER_1|WRONG_ANSWER_2|WRONG_ANSWER_3 " +
+                "Where:\n" +
+                "- The first answer is the CORRECT answer\n" +
+                "- The other three are plausible but INCORRECT answers\n" +
+                "- Each answer should be concise (1-2 sentences max)\n" +
+                "- Do NOT include letters (A) B) C) D)) in the answers\n" +
+                "Return ONLY the pipe-separated answers, nothing else."));
+            messages.add(new ChatMessage(ChatMessageRole.USER.value(), "Question: " + cleanQuestionText));
+            
+            ChatCompletionRequest request = ChatCompletionRequest.builder()
+                .model(openAIConfig.getModel())
+                .messages(messages)
+                .maxTokens(400)
+                .temperature(0.7)
+                .build();
+            
+            String response = openAiService.createChatCompletion(request)
+                .getChoices()
+                .get(0)
+                .getMessage()
+                .getContent();
+            
+            System.out.println("=== ANSWER GENERATION RESPONSE ===");
+            System.out.println("Question: " + cleanQuestionText);
+            System.out.println("Response: " + response);
+            System.out.println("=== END RESPONSE ===");
+            
+            // Parse the response into quiz answers
+            List<QuizAnswer> answers = new ArrayList<>();
+            String[] lines = response.split("\n");
+            for (String line : lines) {
+                line = line.trim();
+                if (line.isEmpty()) continue;
                 
-                for (int i = 1; i < 4; i++) {
-                    QuizAnswer wrongAnswer = new QuizAnswer();
-                    wrongAnswer.setAnswerText("This is an incorrect option " + i + ".");
-                    wrongAnswer.setIsCorrect(false);
-                    answers.add(wrongAnswer);
+                // Skip header lines
+                if (line.toLowerCase().startsWith("answer") || 
+                    line.toLowerCase().startsWith("option")) {
+                    continue;
                 }
+                
+                if (line.contains("|")) {
+                    String[] parts = line.split("\\|");
+                    if (parts.length >= 4) {
+                        // Correct answer (first one)
+                        QuizAnswer correctAnswer = new QuizAnswer();
+                        String correctText = parts[0].trim();
+                        correctText = correctText.replaceAll("^[A-D]\\)\\s*", "").trim();
+                        correctAnswer.setAnswerText(correctText);
+                        correctAnswer.setIsCorrect(true);
+                        answers.add(correctAnswer);
+                        
+                        // Wrong answers
+                        for (int i = 1; i < parts.length && i < 4; i++) {
+                            QuizAnswer wrongAnswer = new QuizAnswer();
+                            String wrongText = parts[i].trim();
+                            wrongText = wrongText.replaceAll("^[A-D]\\)\\s*", "").trim();
+                            wrongAnswer.setAnswerText(wrongText);
+                            wrongAnswer.setIsCorrect(false);
+                            answers.add(wrongAnswer);
+                        }
+                        break; // Found valid answer set, stop parsing
+                    }
+                }
+            }
+            
+            // If parsing failed, throw exception instead of using placeholder
+            if (answers.isEmpty()) {
+                System.err.println("Failed to parse answers from response: " + response);
+                throw new IllegalStateException("Failed to generate valid answers for question. AI response was: " + response);
             }
             
             return answers;
             
         } catch (Exception e) {
-            // Fallback to simple answer generation
-            List<QuizAnswer> answers = new ArrayList<>();
-            
-            QuizAnswer correctAnswer = new QuizAnswer();
-            correctAnswer.setAnswerText("This is the correct answer based on the content.");
-            correctAnswer.setIsCorrect(true);
-            answers.add(correctAnswer);
-            
-            for (int i = 1; i < 4; i++) {
-                QuizAnswer wrongAnswer = new QuizAnswer();
-                wrongAnswer.setAnswerText("This is an incorrect option " + i + ".");
-                wrongAnswer.setIsCorrect(false);
-                answers.add(wrongAnswer);
-            }
-            
-            return answers;
+            System.err.println("Error generating quiz answers: " + e.getMessage());
+            e.printStackTrace();
+            // Re-throw instead of returning placeholder answers
+            throw new RuntimeException("Failed to generate quiz answers: " + e.getMessage(), e);
         }
     }
     
