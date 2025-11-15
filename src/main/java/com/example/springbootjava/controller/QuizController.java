@@ -35,7 +35,11 @@ public class QuizController {
         Page<Quiz> quizPage = quizService.getUserQuizzes(user, pageable);
         
         List<QuizResponseDTO> quizDTOs = quizPage.getContent().stream()
-            .map(QuizResponseDTO::new)
+            .map(quiz -> {
+                Double bestScore = quizService.getBestScoreForUserAndQuiz(user, quiz);
+                Integer bestScoreInt = bestScore != null ? bestScore.intValue() : null;
+                return new QuizResponseDTO(quiz, bestScoreInt);
+            })
             .collect(java.util.stream.Collectors.toList());
         
         return ResponseEntity.ok(quizDTOs);
@@ -51,7 +55,11 @@ public class QuizController {
         List<Quiz> quizzes = quizService.getPublishedQuizzes(user);
         
         List<QuizResponseDTO> quizDTOs = quizzes.stream()
-            .map(QuizResponseDTO::new)
+            .map(quiz -> {
+                Double bestScore = quizService.getBestScoreForUserAndQuiz(user, quiz);
+                Integer bestScoreInt = bestScore != null ? bestScore.intValue() : null;
+                return new QuizResponseDTO(quiz, bestScoreInt);
+            })
             .collect(java.util.stream.Collectors.toList());
         
         return ResponseEntity.ok(quizDTOs);
@@ -122,7 +130,9 @@ public class QuizController {
         if (quizOpt.isPresent()) {
             Quiz quiz = quizOpt.get();
             if (quiz.getUser().getId().equals(user.getId())) {
-                QuizResponseDTO quizDTO = new QuizResponseDTO(quiz);
+                Double bestScore = quizService.getBestScoreForUserAndQuiz(user, quiz);
+                Integer bestScoreInt = bestScore != null ? bestScore.intValue() : null;
+                QuizResponseDTO quizDTO = new QuizResponseDTO(quiz, bestScoreInt);
                 return ResponseEntity.ok(quizDTO);
             } else {
                 return ResponseEntity.status(403).build();
@@ -173,6 +183,44 @@ public class QuizController {
             }
         } else {
             return ResponseEntity.notFound().build();
+        }
+    }
+    
+    @PostMapping("/{id}/submit")
+    public ResponseEntity<Map<String, Object>> submitQuiz(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> submissionData,
+            Authentication authentication) {
+        User user = (User) authentication.getPrincipal();
+        
+        try {
+            Double score = ((Number) submissionData.get("score")).doubleValue();
+            Integer timeSpentMinutes = submissionData.get("timeSpentMinutes") != null 
+                ? ((Number) submissionData.get("timeSpentMinutes")).intValue() 
+                : null;
+            
+            quizService.submitQuizAttempt(id, user, score, timeSpentMinutes);
+            
+            // Get updated quiz with best score
+            Optional<Quiz> quizOpt = quizService.getQuizById(id);
+            if (quizOpt.isPresent()) {
+                Quiz quiz = quizOpt.get();
+                Double bestScore = quizService.getBestScoreForUserAndQuiz(user, quiz);
+                
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", true);
+                response.put("score", score);
+                response.put("bestScore", bestScore);
+                
+                return ResponseEntity.ok(response);
+            } else {
+                return ResponseEntity.notFound().build();
+            }
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
         }
     }
 }

@@ -4,10 +4,12 @@ import com.example.springbootjava.entity.Document;
 import com.example.springbootjava.entity.Quiz;
 import com.example.springbootjava.entity.QuizQuestion;
 import com.example.springbootjava.entity.QuizAnswer;
+import com.example.springbootjava.entity.QuizAttempt;
 import com.example.springbootjava.entity.User;
 import com.example.springbootjava.repository.QuizRepository;
 import com.example.springbootjava.repository.QuizQuestionRepository;
 import com.example.springbootjava.repository.QuizAnswerRepository;
+import com.example.springbootjava.repository.QuizAttemptRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -38,6 +40,9 @@ public class QuizService {
     
     @Autowired
     private DocumentContentExtractor contentExtractor;
+    
+    @Autowired
+    private QuizAttemptRepository quizAttemptRepository;
     
     public List<Quiz> getUserQuizzes(User user) {
         return quizRepository.findByUserOrderByCreatedAtDesc(user);
@@ -201,5 +206,26 @@ public class QuizService {
         quiz.setQuestions(savedQuestions);
         
         return quiz;
+    }
+    
+    public QuizAttempt submitQuizAttempt(Long quizId, User user, Double score, Integer timeSpentMinutes) {
+        Optional<Quiz> quizOpt = quizRepository.findById(quizId);
+        if (quizOpt.isEmpty()) {
+            throw new IllegalArgumentException("Quiz not found with id: " + quizId);
+        }
+        
+        Quiz quiz = quizOpt.get();
+        
+        // Calculate max score (100.0 for percentage-based scoring)
+        Double maxScore = 100.0;
+        
+        // Create and save quiz attempt
+        QuizAttempt attempt = new QuizAttempt(score, maxScore, timeSpentMinutes, quiz, user);
+        return quizAttemptRepository.save(attempt);
+    }
+    
+    public Double getBestScoreForUserAndQuiz(User user, Quiz quiz) {
+        Optional<QuizAttempt> bestAttempt = quizAttemptRepository.findBestAttemptByUserAndQuiz(user, quiz);
+        return bestAttempt.map(QuizAttempt::getScore).orElse(null);
     }
 }

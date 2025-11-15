@@ -22,8 +22,13 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
     @Query("SELECT qa FROM QuizAttempt qa WHERE qa.user = :user AND qa.quiz = :quiz ORDER BY qa.completedAt DESC")
     List<QuizAttempt> findByUserAndQuiz(@Param("user") User user, @Param("quiz") Quiz quiz);
     
-    @Query("SELECT qa FROM QuizAttempt qa WHERE qa.user = :user AND qa.quiz = :quiz ORDER BY qa.score DESC LIMIT 1")
-    Optional<QuizAttempt> findBestAttemptByUserAndQuiz(@Param("user") User user, @Param("quiz") Quiz quiz);
+    @Query("SELECT qa FROM QuizAttempt qa WHERE qa.user = :user AND qa.quiz = :quiz ORDER BY qa.score DESC")
+    List<QuizAttempt> findByUserAndQuizOrderByScoreDesc(@Param("user") User user, @Param("quiz") Quiz quiz);
+    
+    default Optional<QuizAttempt> findBestAttemptByUserAndQuiz(User user, Quiz quiz) {
+        List<QuizAttempt> attempts = findByUserAndQuizOrderByScoreDesc(user, quiz);
+        return attempts.isEmpty() ? Optional.empty() : Optional.of(attempts.get(0));
+    }
     
     @Query("SELECT AVG(qa.score) FROM QuizAttempt qa WHERE qa.user = :user")
     Double findAverageScoreByUser(@Param("user") User user);

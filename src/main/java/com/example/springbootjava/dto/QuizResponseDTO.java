@@ -1,8 +1,6 @@
 package com.example.springbootjava.dto;
 
 import com.example.springbootjava.entity.Quiz;
-import com.example.springbootjava.entity.QuizQuestion;
-import com.example.springbootjava.entity.QuizAnswer;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -24,6 +22,10 @@ public class QuizResponseDTO {
     public QuizResponseDTO() {}
 
     public QuizResponseDTO(Quiz quiz) {
+        this(quiz, null);
+    }
+    
+    public QuizResponseDTO(Quiz quiz, Integer bestScore) {
         this.id = quiz.getId();
         this.title = quiz.getTitle();
         this.description = quiz.getDescription();
@@ -41,7 +43,7 @@ public class QuizResponseDTO {
         }
         
         this.completed = false; // Default value
-        this.score = null; // Default value
+        this.score = bestScore; // Set best score if provided
     }
 
     // Getters and Setters
