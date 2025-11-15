@@ -18,6 +18,8 @@ public class QuizResponseDTO {
     private List<QuizQuestionResponseDTO> questions;
     private Boolean completed;
     private Integer score;
+    private Long documentId;
+    private String documentTitle;
 
     public QuizResponseDTO() {}
 
@@ -44,6 +46,12 @@ public class QuizResponseDTO {
         
         this.completed = false; // Default value
         this.score = bestScore; // Set best score if provided
+        
+        // Include document information if available
+        if (quiz.getDocument() != null) {
+            this.documentId = quiz.getDocument().getId();
+            this.documentTitle = quiz.getDocument().getTitle();
+        }
     }
 
     // Getters and Setters
@@ -133,5 +141,21 @@ public class QuizResponseDTO {
 
     public void setScore(Integer score) {
         this.score = score;
+    }
+
+    public Long getDocumentId() {
+        return documentId;
+    }
+
+    public void setDocumentId(Long documentId) {
+        this.documentId = documentId;
+    }
+
+    public String getDocumentTitle() {
+        return documentTitle;
+    }
+
+    public void setDocumentTitle(String documentTitle) {
+        this.documentTitle = documentTitle;
     }
 }

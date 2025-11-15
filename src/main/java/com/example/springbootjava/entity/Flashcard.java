@@ -2,8 +2,8 @@ package com.example.springbootjava.entity;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
 
@@ -156,5 +156,37 @@ public class Flashcard {
     
     public void setStudySessions(java.util.Set<FlashcardStudySession> studySessions) {
         this.studySessions = studySessions;
+    }
+
+    @JsonProperty("documentId")
+    public Long getDocumentId() {
+        return document != null ? document.getId() : null;
+    }
+
+    @JsonProperty("document")
+    public DocumentInfo getDocumentInfo() {
+        if (document == null) {
+            return null;
+        }
+        return new DocumentInfo(document.getId(), document.getTitle());
+    }
+
+    // Inner class for document info
+    public static class DocumentInfo {
+        private Long id;
+        private String title;
+
+        public DocumentInfo(Long id, String title) {
+            this.id = id;
+            this.title = title;
+        }
+
+        public Long getId() {
+            return id;
+        }
+
+        public String getTitle() {
+            return title;
+        }
     }
 }
